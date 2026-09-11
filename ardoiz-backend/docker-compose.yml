@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ardoiz
+      POSTGRES_PASSWORD: ardoiz
+      POSTGRES_DB: ardoiz
+    ports:
+      - "5432:5432"
+    volumes:
+      - ardoiz_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ardoiz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://ardoiz:ardoiz@db:5432/ardoiz?schema=public
+    ports:
+      - "3000:3000"
+
+volumes:
+  ardoiz_db_data:

@@ -1,0 +1,86 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+
+/** Echappe une valeur pour un champ CSV (RFC 4180). */
+function csvField(value: unknown): string {
+  const str = value === null || value === undefined ? '' : String(value);
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function formatDate(date: Date | null): string {
+  if (!date) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
+  PARTIAL: 'Partiellement remboursee',
+  PAID: 'Remboursee',
+};
+
+@Injectable()
+export class ExportService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Genere l'historique complet (une ligne par dette/"ardoise") du
+   * commercant au format CSV, pour lui permettre de garder une trace
+   * exportable de toutes les entrees (dettes) et sorties (remboursements)
+   * enregistrees dans l'app, independamment d'Ardoiz.
+   */
+  async generateHistoryCsv(userId: string): Promise<string> {
+    const debts = await this.prisma.debt.findMany({
+      where: { customer: { userId } },
+      include: { customer: true, payments: true, reminders: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const headers = [
+      'Client',
+      'Telephone client',
+      'Categorie',
+      'Motif',
+      'Montant initial (FCFA)',
+      'Montant rembourse (FCFA)',
+      'Solde restant (FCFA)',
+      'Statut',
+      'Date d\'enregistrement',
+      'Date d\'echeance',
+      'Date du dernier remboursement',
+      'Methode du dernier remboursement',
+      'Nombre de relances envoyees',
+    ];
+
+    const rows = debts.map((debt) => {
+      const totalPaid = debt.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const outstanding = Math.max(0, Number(debt.amount) - totalPaid);
+      const lastPayment = debt.payments.sort(
+        (a, b) => b.paidAt.getTime() - a.paidAt.getTime(),
+      )[0];
+
+      return [
+        debt.customer.name,
+        debt.customer.phone,
+        debt.category,
+        debt.reason ?? '',
+        Number(debt.amount).toFixed(2),
+        totalPaid.toFixed(2),
+        outstanding.toFixed(2),
+        STATUS_LABELS[debt.status] ?? debt.status,
+        formatDate(debt.createdAt),
+        formatDate(debt.dueDate),
+        lastPayment ? formatDate(lastPayment.paidAt) : '',
+        lastPayment ? lastPayment.method : '',
+        debt.reminders.length,
+      ];
+    });
+
+    const lines = [headers, ...rows].map((row) => row.map(csvField).join(','));
+    // BOM UTF-8 : garantit que les caracteres accentues s'affichent
+    // correctement a l'ouverture dans Excel.
+    return '﻿' + lines.join('\r\n');
+  }
+}

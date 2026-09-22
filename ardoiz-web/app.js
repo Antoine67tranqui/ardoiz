@@ -169,26 +169,28 @@ function setButtonLoading(button, loading) {
 
 function renderSplash() {
   return `
-    <div class="hero-bg hero-bg-1">
-      <div class="hero-content">
-        <img src="logo-icon.png" alt="Ardoiz" class="splash-logo-small anim-in" style="animation-delay:0.05s" />
+    <div class="hero-bg hero-bg-1 splash-bg">
+      <div class="hero-content splash-content">
+        <img src="logo-icon.png" alt="Ardoiz" class="splash-logo anim-in" style="animation-delay:0.05s" />
 
-        <div class="hook-questions">
-          <p class="anim-in" style="animation-delay:0.15s">😩 Vous en avez marre de ne plus savoir qui vous doit de l'argent ?</p>
-          <p class="anim-in" style="animation-delay:0.30s">📒 Votre carnet de credit est raye, perdu ou illisible ?</p>
-          <p class="anim-in" style="animation-delay:0.45s">🤷 Vos clients "oublient" leur ardoise, et vous n'osez pas insister ?</p>
+        <h1 class="splash-tagline anim-in" style="animation-delay:0.15s">
+          Ne perdez plus jamais la trace de qui vous doit de l'argent.
+        </h1>
+
+        <div class="splash-features anim-in" style="animation-delay:0.3s">
+          <div class="feature-chip"><span>📒</span> Registre digital de vos ardoises</div>
+          <div class="feature-chip"><span>🔔</span> Rappels automatiques aux clients</div>
+          <div class="feature-chip"><span>💰</span> Encaissement especes ou Mobile Money</div>
         </div>
 
-        <div class="hook-pitch anim-in" style="animation-delay:0.6s">
-          <p>
-            <strong>Ardoiz</strong> vous permet de tenir un registre numerique
-            de toutes les dettes de vos clients, d'etre rembourse a temps
-            grace aux rappels automatiques, et de garder le controle total
-            de votre tresorerie, le tout depuis votre telephone.
-          </p>
-        </div>
+        <p class="splash-trust anim-in" style="animation-delay:0.45s">
+          🔒 Securise &nbsp;·&nbsp; 📶 100% hors ligne &nbsp;·&nbsp; 🌍 Pense pour l'Afrique de l'Ouest
+        </p>
 
-        <button class="primary anim-in" id="splash-continue-btn" style="max-width:320px;animation-delay:0.75s">Commencer</button>
+        <div class="splash-cta anim-in" style="animation-delay:0.6s">
+          <button class="primary" id="splash-continue-btn">Commencer gratuitement</button>
+          <p class="splash-microcopy">Sans engagement &middot; Configuration en 2 minutes</p>
+        </div>
       </div>
     </div>`;
 }

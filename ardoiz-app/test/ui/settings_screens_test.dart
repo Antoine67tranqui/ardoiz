@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:ardoiz/app/providers.dart';
@@ -329,7 +328,7 @@ void main() {
 
   group('abonnement', () {
     SubscriptionStatus free({int customers = 3}) =>
-        SubscriptionStatus(plan: Plan.free, customerCount: customers, customerLimit: 15, monthlyPrice: Money.fromCents(200000));
+        SubscriptionStatus(plan: Plan.free, customerCount: customers, customerLimit: 15, monthlyPrice: const Money.fromCents(200000));
 
     testWidgets('plan gratuit : situation, comparatif et prix', (tester) async {
       when(() => env.api.subscriptionStatus()).thenAnswer((_) async => free());
@@ -338,7 +337,7 @@ void main() {
       expect(find.text('Gratuit'), findsWidgets);
       expect(find.text('3 clients sur 15 autorisés'), findsOneWidget);
       expect(find.text('Clients'), findsOneWidget);
-      expect(find.text('Passer à Premium (${formatMoney(Money.fromCents(200000))} / mois)'), findsOneWidget);
+      expect(find.text('Passer à Premium (${formatMoney(const Money.fromCents(200000))} / mois)'), findsOneWidget);
     });
 
     testWidgets('paiement confirmé : active Premium, rafraîchit le profil et annonce le résultat', (tester) async {
@@ -349,7 +348,7 @@ void main() {
           plan: Plan.premium,
           planExpiresAt: DateTime.utc(2026, 11, 3),
           customerCount: 3,
-          monthlyPrice: Money.fromCents(200000),
+          monthlyPrice: const Money.fromCents(200000),
         );
         return const UpgradeResult(activated: true, simulated: false, message: 'Premium activé.');
       });
@@ -359,7 +358,7 @@ void main() {
       await tester.tap(find.textContaining('Passer à Premium ('));
       await tester.pumpAndSettle();
       expect(find.textContaining('Premium dure 30 jours'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(Money.fromCents(200000))}'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(const Money.fromCents(200000))}'));
       await tester.pumpAndSettle();
 
       verify(() => env.api.upgrade()).called(1);
@@ -376,7 +375,7 @@ void main() {
 
       await tester.tap(find.textContaining('Passer à Premium ('));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(Money.fromCents(200000))}'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(const Money.fromCents(200000))}'));
       await tester.pumpAndSettle();
 
       expect(find.text('Validez le paiement sur votre téléphone.'), findsOneWidget);
@@ -400,7 +399,7 @@ void main() {
       await pump(tester, initial: '/settings/subscription');
       await tester.tap(find.textContaining('Passer à Premium ('));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(Money.fromCents(200000))}'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Payer ${formatMoney(const Money.fromCents(200000))}'));
       await tester.pumpAndSettle();
       expect(find.textContaining('momentanément indisponible'), findsOneWidget);
     });

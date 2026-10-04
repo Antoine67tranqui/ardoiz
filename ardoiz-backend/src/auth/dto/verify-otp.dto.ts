@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsPhoneNumber, Length } from 'class-validator';
 
 export class VerifyOtpDto {
-  @ApiProperty({ example: '+22997000000' })
+  @ApiProperty({ example: '+2290167077027' })
   @IsPhoneNumber(undefined, { message: 'Numero de telephone invalide' })
   phone!: string;
 

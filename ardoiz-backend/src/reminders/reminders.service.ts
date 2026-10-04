@@ -64,8 +64,15 @@ export class RemindersService {
 
       for (const debt of debts) {
         try {
-          await this.dispatchReminder(debt.id, rule.channel, rule.offsetDays, rule.tone);
-          sent += 1;
+          const reminder = await this.dispatchReminder(
+            debt.id,
+            rule.channel,
+            rule.offsetDays,
+            rule.tone,
+          );
+          // dispatchReminder absorbe les echecs d'envoi (statut FAILED) : ne
+          // compter que les relances reellement parties.
+          if (reminder.status === 'SENT') sent += 1;
         } catch (error) {
           this.logger.error(`Echec relance dette ${debt.id} (etape ${rule.offsetDays}j)`, error as Error);
         }

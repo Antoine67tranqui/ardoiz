@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DebtStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -22,7 +31,8 @@ export class DebtsController {
   @Get()
   findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('status') status?: DebtStatus,
+    @Query('status', new ParseEnumPipe(DebtStatus, { optional: true }))
+    status?: DebtStatus,
   ) {
     return this.debtsService.findAllForUser(user.id, status);
   }

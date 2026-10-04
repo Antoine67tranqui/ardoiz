@@ -155,6 +155,9 @@ class SessionService {
   Future<Profile> refreshProfile() async {
     final profile = await api.profile();
     _ledger.setMeta(_profileKey, _encode(profile));
+    // Base vierge (données locales réinitialisées) : elle appartient désormais à ce
+    // compte, sinon la connexion d'un autre commerçant n'effacerait pas ces données.
+    if (_ledger.meta(_userKey) == null) _ledger.setMeta(_userKey, profile.id);
     return profile;
   }
 

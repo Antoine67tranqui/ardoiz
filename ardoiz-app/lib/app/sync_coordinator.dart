@@ -64,6 +64,9 @@ abstract interface class SyncControl {
   SyncState get state;
   Stream<SyncState> get states;
 
+  /// Démarre les déclencheurs automatiques (une session est ouverte). Sans effet si déjà démarré.
+  Future<void> start();
+
   /// Synchronise maintenant (bouton, tirer pour rafraîchir).
   Future<void> syncNow();
 }
@@ -117,6 +120,7 @@ class SyncCoordinator implements SyncControl {
   Stream<SyncState> get states => _states.stream;
 
   /// Démarre les déclencheurs et lance une première synchronisation.
+  @override
   Future<void> start() async {
     if (_started || _disposed) return;
     _started = true;

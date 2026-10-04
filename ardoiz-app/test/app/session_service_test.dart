@@ -125,6 +125,20 @@ void main() {
     });
   });
 
+  test('base réinitialisée puis session retrouvée par le réseau : la base est liée à ce compte (un autre compte l\'efface)', () async {
+    final a = api.addAccount();
+    final b = api.addAccount(phone: '+2290167000002', business: 'Boutique B');
+    await service.login(phone: a.phone, pin: '1234');
+    db.clearAllData(); // données locales réinitialisées, jetons conservés
+    expect(await service.restore(), isA<SignedIn>());
+    expect(ledger.meta('user_id'), a.id);
+
+    repo.addCustomer(name: 'Client de A', phone: '+229 01 67 07 70 27');
+    outbox.clear();
+    await service.login(phone: b.phone, pin: '1234');
+    expect(ledger.customers(), isEmpty, reason: 'les données de A ne doivent jamais passer chez B');
+  });
+
   group('changement de compte sur le même appareil', () {
     test('la même personne qui se reconnecte (session expirée) retrouve ses données', () async {
       final account = api.addAccount();

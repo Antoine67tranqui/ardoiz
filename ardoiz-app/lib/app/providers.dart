@@ -55,8 +55,10 @@ final Provider<LedgerRepository> repositoryProvider = Provider<LedgerRepository>
   (ref) => LedgerRepository(db: ref.watch(databaseProvider), clock: ref.watch(clockProvider)),
 );
 
-/// Synchronisation automatique ; démarrée par l'application quand une session est ouverte.
+/// Synchronisation automatique, propre à la session ouverte : un autre compte
+/// obtient un nouveau moteur (l'ancien est arrêté).
 final Provider<SyncControl> syncControlProvider = Provider<SyncControl>((ref) {
+  ref.watch(sessionProvider.select((s) => s is SignedIn ? s.profile.id : null));
   final coordinator = SyncCoordinator(
     engine: SyncEngine(
       db: ref.watch(databaseProvider),
@@ -97,6 +99,16 @@ class SessionNotifier extends Notifier<SessionState> {
   SessionState build() => ref.read(initialSessionProvider);
 
   SessionService get _service => ref.read(sessionServiceProvider);
+
+  /// Au lancement : session restaurée depuis le coffre sécurisé et la base locale
+  /// (fonctionne hors ligne). Le réseau n'est sollicité qu'en dernier recours.
+  Future<void> restore({Duration timeout = const Duration(seconds: 8)}) async {
+    try {
+      state = await _service.restore().timeout(timeout);
+    } on Object {
+      state = const SignedOut();
+    }
+  }
 
   Future<void> login({required String phone, required String pin, bool discardUnsynced = false}) async {
     state = await _service.login(phone: phone, pin: pin, discardUnsyncedFromOtherAccount: discardUnsynced);

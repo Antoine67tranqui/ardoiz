@@ -28,12 +28,16 @@ class FakeSyncControl implements SyncControl {
   SyncState _state = const SyncState();
   final StreamController<SyncState> _controller = StreamController<SyncState>.broadcast();
   int syncCalls = 0;
+  int startCalls = 0;
 
   @override
   SyncState get state => _state;
 
   @override
   Stream<SyncState> get states => _controller.stream;
+
+  @override
+  Future<void> start() async => startCalls++;
 
   @override
   Future<void> syncNow() async => syncCalls++;
@@ -87,12 +91,13 @@ class UiEnv {
   final FakeSyncControl sync = FakeSyncControl();
   final InMemorySecretStore secrets = InMemorySecretStore();
 
-  List<Override> overrides(SessionState session) => <Override>[
+  /// [fakeSync] à faux : le vrai moteur de synchronisation (construit, jamais démarré).
+  List<Override> overrides(SessionState session, {bool fakeSync = true}) => <Override>[
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(() => now),
         secretStoreProvider.overrideWithValue(secrets),
         backendApiProvider.overrideWithValue(api),
-        syncControlProvider.overrideWithValue(sync),
+        if (fakeSync) syncControlProvider.overrideWithValue(sync),
         connectivityProvider.overrideWithValue(FakeConnectivityService()),
         initialSessionProvider.overrideWithValue(session),
       ];

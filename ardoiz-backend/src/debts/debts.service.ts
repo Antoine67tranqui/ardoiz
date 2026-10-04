@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { DebtStatus } from '@prisma/client';
+import { DebtStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDebtDto } from './dto/create-debt.dto';
 
@@ -37,8 +37,15 @@ export class DebtsService {
         where: { customerId: customer.id, status: { not: 'PAID' } },
         select: { amount: true },
       });
-      const totalOutstanding = outstandingDebts.reduce((sum, d) => sum + Number(d.amount), 0);
-      creditLimitExceeded = totalOutstanding > Number(customer.creditLimit);
+      // Addition en Prisma.Decimal plutot qu'en Number() : des montants FCFA
+      // convertis en flottant peuvent deriver legerement apres de nombreuses
+      // petites additions, ce qui fausserait une comparaison au plafond de
+      // credit pile a la limite.
+      const totalOutstanding = outstandingDebts.reduce(
+        (sum, d) => sum.plus(d.amount),
+        new Prisma.Decimal(0),
+      );
+      creditLimitExceeded = totalOutstanding.greaterThan(customer.creditLimit);
     }
 
     return { ...debt, creditLimitExceeded };
@@ -66,12 +73,15 @@ export class DebtsService {
       where: { id: debtId },
       include: { payments: true },
     });
-    const totalPaid = debt.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const totalPaid = debt.payments.reduce(
+      (sum, p) => sum.plus(p.amount),
+      new Prisma.Decimal(0),
+    );
 
     let status: DebtStatus = 'PENDING';
-    if (totalPaid >= Number(debt.amount)) {
+    if (totalPaid.greaterThanOrEqualTo(debt.amount)) {
       status = 'PAID';
-    } else if (totalPaid > 0) {
+    } else if (totalPaid.greaterThan(0)) {
       status = 'PARTIAL';
     }
 

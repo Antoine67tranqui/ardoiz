@@ -6,10 +6,23 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true conserve le corps brut de chaque requete (req.rawBody),
+  // necessaire pour verifier la signature HMAC du webhook Mobile Money sur
+  // les octets exacts envoyes par l'agregateur plutot que sur une
+  // re-serialisation du DTO (voir MobileMoneyController).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(helmet());
-  app.enableCors();
+
+  // Liste blanche d'origines plutot qu'un CORS totalement ouvert : cette API
+  // sert des donnees financieres (dettes, paiements), elle ne doit repondre
+  // qu'aux clients connus (app web, site vitrine), pas a n'importe quel site.
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: corsOrigins, credentials: true });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

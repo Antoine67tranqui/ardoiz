@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PaymentMethod } from '@prisma/client';
+import { Prisma, PaymentMethod } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { DebtsService } from '../debts/debts.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+
+const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
 @Injectable()
 export class PaymentsService {
@@ -52,9 +54,31 @@ export class PaymentsService {
       throw new BadRequestException('Dette introuvable');
     }
 
-    const payment = await this.prisma.payment.create({
-      data: { debtId, amount, method, transactionRef },
-    });
+    let payment;
+    try {
+      payment = await this.prisma.payment.create({
+        data: { debtId, amount, method, transactionRef },
+      });
+    } catch (error) {
+      // Deux livraisons concurrentes du meme webhook peuvent toutes deux
+      // passer le findUnique() de createFromMobileMoneyWebhook avant que
+      // l'une des deux n'ecrive : la seconde heurte alors la contrainte
+      // unique sur transactionRef. On traite ce cas comme "deja traite"
+      // plutot que de laisser remonter une 500 brute au webhook.
+      if (
+        transactionRef &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === UNIQUE_CONSTRAINT_VIOLATION
+      ) {
+        const existing = await this.prisma.payment.findUnique({
+          where: { transactionRef },
+        });
+        if (existing) {
+          return existing;
+        }
+      }
+      throw error;
+    }
 
     await this.debtsService.recomputeStatus(debtId);
 

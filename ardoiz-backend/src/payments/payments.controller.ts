@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -35,12 +36,15 @@ export class PaymentsController {
       throw new BadRequestException("Ce client n'a pas de numero de telephone enregistre");
     }
 
-    const totalPaid = debt.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-    const outstanding = Number(debt.amount) - totalPaid;
+    const totalPaid = debt.payments.reduce(
+      (sum, p) => sum.plus(p.amount),
+      new Prisma.Decimal(0),
+    );
+    const outstanding = new Prisma.Decimal(debt.amount).minus(totalPaid);
 
     return this.mobileMoneyService.requestPayment({
       phone: debt.customer.phone,
-      amount: outstanding,
+      amount: outstanding.toNumber(),
       debtId: debt.id,
       customerName: debt.customer.name,
       businessName: user.businessName,

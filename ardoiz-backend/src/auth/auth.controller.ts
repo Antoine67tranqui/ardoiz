@@ -1,4 +1,5 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RequestOtpDto } from './dto/request-otp.dto';
@@ -16,11 +17,19 @@ import { AuthenticatedUser } from './strategies/jwt.strategy';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // 3 demandes / 5 min par IP : une demande d'OTP declenche un vrai SMS
+  // (cout) une fois le fournisseur configure. Sans limite, le endpoint
+  // devient un outil de spam ("SMS bombing") contre n'importe quel numero.
+  @Throttle({ default: { limit: 3, ttl: 300_000 } })
   @Post('otp/request')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.authService.requestOtp(dto.phone);
   }
 
+  // 10 tentatives / 5 min par IP : le code a 6 chiffres expire deja au bout
+  // de 5 minutes, mais sans limite de requetes un attaquant pourrait tenter
+  // les 10000 combinaisons avant expiration.
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @Post('otp/verify')
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto.phone, dto.code);
@@ -31,6 +40,10 @@ export class AuthController {
     return this.authService.setupPin(dto.otpSessionToken, dto.businessName, dto.pin);
   }
 
+  // Le verrouillage de compte (auth.service.ts) protege deja le PIN apres 5
+  // echecs, mais une limite par IP evite qu'un attaquant essaie des numeros
+  // de telephone differents pour contourner le verrouillage par compte.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.phone, dto.pin);
@@ -46,5 +59,12 @@ export class AuthController {
   @Post('pin/change')
   changePin(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePinDto) {
     return this.authService.changePin(user.id, dto.currentPin, dto.newPin);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.logout(user.id);
   }
 }

@@ -60,6 +60,11 @@ model User {
   // jusqu'a planExpiresAt (reconduit a chaque paiement Mobile Money).
   plan          Plan      @default(FREE)
   planExpiresAt DateTime?
+  // Incremente a la deconnexion et au changement de PIN : tout refresh token
+  // deja emis porte l'ancienne valeur dans son payload et est rejete par
+  // AuthService.refresh(), ce qui permet de revoquer des jetons sans les
+  // stocker individuellement (JWT reste stateless cote acces/refresh).
+  tokenVersion Int        @default(0)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   customers    Customer[]

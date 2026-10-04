@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -55,9 +56,12 @@ export class CustomersService {
     // calcule ici plutot que stocke pour rester source-unique-de-verite.
     let mapped = customers.map((customer) => {
       const outstandingDebts = customer.debts.filter((debt) => debt.status !== 'PAID');
-      const outstandingBalance = outstandingDebts.reduce(
-        (sum, debt) => sum + Number(debt.amount),
-        0,
+      // Decimal plutot que Number() : meme raison que DebtsService.create,
+      // cette somme sert a une comparaison au plafond de credit qui doit
+      // rester exacte au FCFA pres.
+      const outstandingBalanceDec = outstandingDebts.reduce(
+        (sum, debt) => sum.plus(debt.amount),
+        new Prisma.Decimal(0),
       );
       const hasOverdueDebt = outstandingDebts.some(
         (debt) => debt.dueDate && debt.dueDate.getTime() < now.getTime(),
@@ -67,9 +71,10 @@ export class CustomersService {
       return {
         ...rest,
         creditLimit,
-        outstandingBalance,
+        outstandingBalance: outstandingBalanceDec.toNumber(),
         hasOverdueDebt,
-        creditLimitExceeded: creditLimit !== null && outstandingBalance > creditLimit,
+        creditLimitExceeded:
+          creditLimit !== null && outstandingBalanceDec.greaterThan(creditLimit),
       };
     });
 

@@ -71,9 +71,14 @@ export class AuthService {
     const smsIsSimulated =
       !this.config.get<string>('SMS_API_KEY') ||
       !this.config.get<string>('SMS_USERNAME');
+    // Ne jamais renvoyer le code dans la reponse HTTP en production, meme si
+    // SMS_API_KEY/SMS_USERNAME sont temporairement absents par erreur de
+    // configuration : un devCode expose en prod permettrait de prendre le
+    // controle de n'importe quel compte sans jamais recevoir le SMS.
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     return {
       message: 'Code OTP envoye par SMS',
-      ...(smsIsSimulated ? { devCode: code } : {}),
+      ...(smsIsSimulated && !isProduction ? { devCode: code } : {}),
     };
   }
 
@@ -101,7 +106,7 @@ export class AuthService {
     const otpSessionToken = this.jwt.sign(
       { phone, purpose: 'otp-verified' } satisfies OtpSessionPayload,
       {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+        secret: this.getOtpSessionSecret(),
         expiresIn: '10m',
       },
     );
@@ -122,7 +127,7 @@ export class AuthService {
       data: { businessName, pinHash },
     });
 
-    return this.issueTokens(user.id, user.phone);
+    return this.issueTokens(user.id, user.phone, user.tokenVersion);
   }
 
   async login(phone: string, pin: string): Promise<TokenPair> {
@@ -168,7 +173,7 @@ export class AuthService {
       });
     }
 
-    return this.issueTokens(user.id, user.phone);
+    return this.issueTokens(user.id, user.phone, user.tokenVersion);
   }
 
   /** Changement de PIN par un utilisateur deja connecte, apres verification de l'ancien. */
@@ -183,19 +188,49 @@ export class AuthService {
     const pinHash = await bcrypt.hash(newPin, PIN_SALT_ROUNDS);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { pinHash, pinFailedAttempts: 0, pinLockedUntil: null },
+      data: {
+        pinHash,
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        // Un changement de PIN doit invalider tout refresh token deja emis
+        // (ex: vol de telephone suivi d'un changement de PIN par le
+        // proprietaire legitime) : incrementer tokenVersion les fait tous
+        // echouer au prochain refresh(), sans avoir a les lister/stocker.
+        tokenVersion: { increment: 1 },
+      },
     });
 
     return { message: 'PIN mis a jour' };
   }
 
+  /** Revoque tous les refresh tokens en circulation pour cet utilisateur (deconnexion explicite). */
+  async logout(userId: string): Promise<{ message: string }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    return { message: 'Deconnecte' };
+  }
+
   async refresh(refreshToken: string): Promise<TokenPair> {
     try {
-      const payload = this.jwt.verify<{ sub: string; phone: string }>(
-        refreshToken,
-        { secret: this.config.get<string>('JWT_REFRESH_SECRET') },
-      );
-      return this.issueTokens(payload.sub, payload.phone);
+      const payload = this.jwt.verify<{
+        sub: string;
+        phone: string;
+        tokenVersion: number;
+      }>(refreshToken, { secret: this.config.get<string>('JWT_REFRESH_SECRET') });
+
+      const user = await this.prisma.user.findUniqueOrThrow({
+        where: { id: payload.sub },
+      });
+      // Un refresh token emis avant un logout() ou changePin() porte encore
+      // l'ancienne valeur de tokenVersion : il doit etre rejete meme si sa
+      // signature et son expiration sont valides.
+      if (user.tokenVersion !== payload.tokenVersion) {
+        throw new UnauthorizedException('Jeton de rafraichissement revoque');
+      }
+
+      return this.issueTokens(user.id, user.phone, user.tokenVersion);
     } catch {
       throw new UnauthorizedException('Jeton de rafraichissement invalide');
     }
@@ -204,7 +239,7 @@ export class AuthService {
   private decodeOtpSession(token: string): OtpSessionPayload {
     try {
       const payload = this.jwt.verify<OtpSessionPayload>(token, {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+        secret: this.getOtpSessionSecret(),
       });
       if (payload.purpose !== 'otp-verified') {
         throw new Error('invalid purpose');
@@ -215,7 +250,26 @@ export class AuthService {
     }
   }
 
-  private issueTokens(userId: string, phone: string): TokenPair {
+  // Secret dedie aux jetons de session OTP (courte duree, etape intermediaire
+  // entre la verification du code et la creation/connexion du compte), separe
+  // de JWT_ACCESS_SECRET : la verification du `purpose` protege deja contre
+  // la confusion de jetons, mais reutiliser un meme secret pour deux types de
+  // jetons distincts reste un risque si un futur chemin de code verifie un
+  // jeton sans en controler le `purpose`. Se replie sur JWT_ACCESS_SECRET si
+  // JWT_OTP_SECRET n'est pas defini, pour rester compatible avec un .env
+  // existant non mis a jour.
+  private getOtpSessionSecret(): string | undefined {
+    return (
+      this.config.get<string>('JWT_OTP_SECRET') ??
+      this.config.get<string>('JWT_ACCESS_SECRET')
+    );
+  }
+
+  private issueTokens(
+    userId: string,
+    phone: string,
+    tokenVersion: number,
+  ): TokenPair {
     const accessToken = this.jwt.sign(
       { sub: userId, phone },
       {
@@ -224,7 +278,7 @@ export class AuthService {
       },
     );
     const refreshToken = this.jwt.sign(
-      { sub: userId, phone },
+      { sub: userId, phone, tokenVersion },
       {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
         expiresIn: this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '30d',

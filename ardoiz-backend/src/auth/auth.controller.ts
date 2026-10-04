@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -8,6 +8,7 @@ import { SetupPinDto } from './dto/setup-pin.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePinDto } from './dto/change-pin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
@@ -59,6 +60,20 @@ export class AuthController {
   @Post('pin/change')
   changePin(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePinDto) {
     return this.authService.changePin(user.id, dto.currentPin, dto.newPin);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(user.id, dto.businessName);
   }
 
   @ApiBearerAuth()

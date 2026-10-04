@@ -208,6 +208,40 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  describe('profil', () => {
+    it('renvoie le profil du commercant connecte, avec le plan reellement actif', async () => {
+      const session = await signUp(ctx, '+2290167000060', 'Boutique Fatou');
+      const get = () => ctx.http().get('/api/v1/auth/me').set('X-Forwarded-For', freshIp()).set(bearer(session));
+
+      expect((await get()).body).toEqual({
+        id: session.userId,
+        phone: session.phone,
+        businessName: 'Boutique Fatou',
+        plan: 'FREE',
+        planExpiresAt: null,
+      });
+
+      await ctx.prisma.user.update({ where: { id: session.userId }, data: { plan: 'PREMIUM', planExpiresAt: new Date(Date.now() + 86400000) } });
+      expect((await get()).body.plan).toBe('PREMIUM');
+      await ctx.prisma.user.update({ where: { id: session.userId }, data: { planExpiresAt: new Date(Date.now() - 1000) } });
+      expect((await get()).body).toMatchObject({ plan: 'FREE', planExpiresAt: null });
+    });
+
+    it('modifie le nom de la boutique (valide, normalise) et exige un jeton', async () => {
+      const session = await signUp(ctx, '+2290167000061', 'Ancien nom');
+      const patch = (body: object) =>
+        ctx.http().patch('/api/v1/auth/me').set('X-Forwarded-For', freshIp()).set(bearer(session)).send(body);
+
+      expect((await patch({ businessName: '  Nouveau nom  ' })).body.businessName).toBe('Nouveau nom');
+      expect((await patch({ businessName: '   ' })).status).toBe(400);
+      expect((await patch({ businessName: 'x'.repeat(101) })).status).toBe(400);
+      expect((await patch({ businessName: 'Ok', plan: 'PREMIUM' })).status).toBe(400); // pas d'auto-promotion
+      expect((await ctx.prisma.user.findUniqueOrThrow({ where: { id: session.userId } })).plan).toBe('FREE');
+
+      expect((await ctx.http().get('/api/v1/auth/me').set('X-Forwarded-For', freshIp())).status).toBe(401);
+    });
+  });
+
   it('exige un jeton valide sur les routes protegees', async () => {
     const none = await ctx.http().get('/api/v1/customers').set('X-Forwarded-For', freshIp());
     expect(none.status).toBe(401);

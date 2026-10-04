@@ -13,6 +13,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { isPremiumActive } from '../subscription/subscription.utils';
 
 const OTP_TTL_MINUTES = 5;
 // Delai minimal entre deux envois de code pour un meme numero : empeche de
@@ -331,6 +332,24 @@ export class AuthService {
     });
 
     return { message: 'PIN mis a jour' };
+  }
+
+  /** Profil du commercant connecte (le plan est celui effectivement actif : un Premium expire est FREE). */
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const premium = isPremiumActive(user);
+    return {
+      id: user.id,
+      phone: user.phone,
+      businessName: user.businessName,
+      plan: premium ? 'PREMIUM' : 'FREE',
+      planExpiresAt: premium ? user.planExpiresAt : null,
+    };
+  }
+
+  async updateProfile(userId: string, businessName: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { businessName } });
+    return this.getProfile(userId);
   }
 
   /** Revoque tous les jetons (acces et refresh) en circulation pour cet utilisateur. */

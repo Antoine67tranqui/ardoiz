@@ -13,6 +13,7 @@ import 'package:ardoiz/data/local/secret_store.dart';
 import 'package:ardoiz/data/remote/backend_api.dart';
 import 'package:ardoiz/data/repositories/ledger_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -166,6 +167,13 @@ Widget buildTestApp(
           darkTheme: AppTheme.dark(),
           themeMode: themeMode,
           routerConfig: router,
+          locale: const Locale('fr'),
+          supportedLocales: const <Locale>[Locale('fr')],
+          localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
             child: child!,

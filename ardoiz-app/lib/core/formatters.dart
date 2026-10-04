@@ -48,3 +48,11 @@ String initials(String name) {
   if (parts.length == 1) return parts.first.characters.first.toUpperCase();
   return (parts.first.characters.first + parts.last.characters.first).toUpperCase();
 }
+
+/// Montant pour un champ de saisie : « 2500 » ou « 1250,50 » (sans séparateur de milliers).
+String formatMoneyInput(Money amount) {
+  final whole = amount.cents.abs() ~/ 100;
+  final fraction = amount.cents.abs() % 100;
+  final sign = amount.cents < 0 ? '-' : '';
+  return fraction == 0 ? '$sign$whole' : '$sign$whole,${fraction.toString().padLeft(2, '0')}';
+}

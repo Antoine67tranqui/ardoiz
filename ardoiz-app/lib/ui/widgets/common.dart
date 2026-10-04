@@ -122,7 +122,7 @@ class DebtStatusBadge extends StatelessWidget {
             children: <Widget>[
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 4),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+              Flexible(child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13))),
             ],
           ),
         ),

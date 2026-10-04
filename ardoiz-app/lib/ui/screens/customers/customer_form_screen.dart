@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/providers.dart';
 import '../../../app/routes.dart';
 import '../../../app/session_service.dart';
+import '../../../core/formatters.dart';
 import '../../../core/money.dart';
 import '../../../core/validators.dart';
 import '../../widgets/auth_widgets.dart';
@@ -47,10 +48,8 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
     _name.text = view.customer.name;
     _phone.text = view.customer.phone;
     final limit = view.customer.creditLimit;
-    _limit.text = limit == null ? '' : _plain(limit);
+    _limit.text = limit == null ? '' : formatMoneyInput(limit);
   }
-
-  static String _plain(Money value) => value.cents % 100 == 0 ? '${value.cents ~/ 100}' : (value.cents / 100).toString().replaceAll('.', ',');
 
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;

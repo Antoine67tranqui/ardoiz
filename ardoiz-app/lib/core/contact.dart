@@ -29,3 +29,14 @@ Uri? whatsappUri(String phone, {String? text}) {
     query: text == null ? null : 'text=${Uri.encodeComponent(text)}',
   );
 }
+
+/// SMS écrit depuis le téléphone (application de messagerie), message pré-rempli.
+Uri? smsUri(String phone, {String? text}) {
+  final call = phoneCallUri(phone);
+  if (call == null) return null;
+  return Uri(
+    scheme: 'sms',
+    path: call.path,
+    query: text == null ? null : 'body=${Uri.encodeComponent(text)}',
+  );
+}

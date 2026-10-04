@@ -1,6 +1,9 @@
 import { createTestApp, freshIp, resetDb, signUp, bearer, TestContext } from './helpers';
 
 describe('Auth (e2e)', () => {
+  const login = (phone: string, pin: string) =>
+    ctx.http().post('/api/v1/auth/login').set('X-Forwarded-For', freshIp()).send({ phone, pin });
+
   let ctx: TestContext;
 
   beforeAll(async () => {
@@ -138,6 +141,21 @@ describe('Auth (e2e)', () => {
         .set('X-Forwarded-For', freshIp())
         .send({ phone: session.phone, pin: '1234' });
       expect(ko.status).toBe(401);
+    });
+
+    it('un PIN actuel incorrect renvoie 400 (et non 401, reserve a la session) sans rien modifier', async () => {
+      const session = await signUp(ctx, '+2290167000024', 'Boutique', '1234');
+      const res = await ctx
+        .http()
+        .post('/api/v1/auth/pin/change')
+        .set('X-Forwarded-For', freshIp())
+        .set(bearer(session))
+        .send({ currentPin: '0000', newPin: '5678' });
+      expect(res.status).toBe(400);
+
+      const stillValid = await ctx.http().get('/api/v1/auth/me').set('X-Forwarded-For', freshIp()).set(bearer(session));
+      expect(stillValid.status).toBe(200);
+      expect((await login(session.phone, '1234')).status).toBe(201);
     });
 
     it('rejette un refresh token forge ou un jeton d\'acces', async () => {

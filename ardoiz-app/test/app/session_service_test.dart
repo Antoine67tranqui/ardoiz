@@ -64,7 +64,7 @@ void main() {
 
     test('mauvais PIN : erreur, aucun jeton conservé', () async {
       api.addAccount();
-      await expectLater(service.login(phone: '+2290167000001', pin: '0000'), throwsA(isA<UnauthorizedException>()));
+      await expectLater(service.login(phone: '+2290167000001', pin: '0000'), throwsA(isA<RejectedException>()));
       expect(await tokens.hasSession, isFalse);
     });
 
@@ -286,7 +286,7 @@ void main() {
       await service.login(phone: account.phone, pin: '1234');
       final before = await tokens.accessToken;
 
-      await expectLater(service.changePin(currentPin: '0000', newPin: '5678'), throwsA(isA<UnauthorizedException>()));
+      await expectLater(service.changePin(currentPin: '0000', newPin: '5678'), throwsA(isA<RejectedException>()));
 
       expect(account.pin, '1234');
       expect(await tokens.accessToken, before);

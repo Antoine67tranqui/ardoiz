@@ -99,11 +99,16 @@ void main() {
       await expectLater(client.send('GET', '/x'), throwsA(isA<RejectedException>().having((e) => e.isNotFound, 'notFound', true)));
     });
 
-    test('401 sur une route publique (mauvais PIN) : UnauthorizedException, sans tentative de rafraîchissement', () async {
+    test('401 sur une route publique (mauvais PIN, compte verrouillé) : refus avec le message du serveur, sans rafraîchissement', () async {
       await signedIn();
-      build(onApi: (r) => ScriptedResponse(401, {'message': 'Identifiants invalides'}));
+      build(onApi: (r) => ScriptedResponse(401, {'statusCode': 401, 'message': 'Trop de tentatives echouees. Reessayez dans 14 minute(s).'}));
 
-      await expectLater(client.send('POST', '/auth/login', body: {}), throwsA(isA<UnauthorizedException>()));
+      await expectLater(
+        client.send('POST', '/auth/login', body: {}),
+        throwsA(isA<RejectedException>()
+            .having((e) => e.statusCode, 'status', 401)
+            .having((e) => e.message, 'message', contains('Trop de tentatives'))),
+      );
       expect(refreshApi.requests, isEmpty);
       expect(expiredCount, 0);
     });

@@ -309,7 +309,7 @@ void main() {
 
     // L'ancienne session est révoquée immédiatement (jeton d'accès compris).
     await expectLater(owner.api.profile(), throwsA(isA<UnauthorizedException>()));
-    await expectLater(HttpBackendApi(newClient(TokenStore(InMemorySecretStore()))).login(phone: owner.phone, pin: '1234'), throwsA(isA<UnauthorizedException>()));
+    await expectLater(HttpBackendApi(newClient(TokenStore(InMemorySecretStore()))).login(phone: owner.phone, pin: '1234'), throwsA(isA<RejectedException>().having((e) => e.statusCode, 'status', 401)));
     final session = await HttpBackendApi(newClient(TokenStore(InMemorySecretStore()))).login(phone: owner.phone, pin: '5678');
     expect(session.accessToken, isNotEmpty);
   });

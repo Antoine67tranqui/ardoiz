@@ -59,13 +59,22 @@ class SyncState {
   int get hashCode => Object.hash(syncing, online, pending, blocked, lastSyncAt, lastStop);
 }
 
+/// Ce que l'interface voit de la synchronisation (simulable dans les tests).
+abstract interface class SyncControl {
+  SyncState get state;
+  Stream<SyncState> get states;
+
+  /// Synchronise maintenant (bouton, tirer pour rafraîchir).
+  Future<void> syncNow();
+}
+
 /// Déclenche la synchronisation au bon moment : au démarrage, au retour du
 /// réseau, après une saisie locale (légèrement différé pour grouper les
 /// frappes), périodiquement, et à l'échéance d'une reprise après échec.
 ///
 /// Les écritures de la synchronisation elle-même ne la redéclenchent pas :
 /// seules les opérations réellement à envoyer le font.
-class SyncCoordinator {
+class SyncCoordinator implements SyncControl {
   SyncCoordinator({
     required this._engine,
     required AppDatabase db,
@@ -102,7 +111,9 @@ class SyncCoordinator {
   bool _started = false;
   bool _disposed = false;
 
+  @override
   SyncState get state => _state;
+  @override
   Stream<SyncState> get states => _states.stream;
 
   /// Démarre les déclencheurs et lance une première synchronisation.
@@ -133,8 +144,8 @@ class SyncCoordinator {
     if (orPull || _outbox.due(clock()).isNotEmpty) await syncNow();
   }
 
-  /// Synchronise maintenant (bouton, tirer pour rafraîchir). Un appel pendant
-  /// une passe en cours demande une passe supplémentaire, sans doublon.
+  /// Un appel pendant une passe en cours demande une passe supplémentaire, sans doublon.
+  @override
   Future<void> syncNow() async {
     if (_disposed) return;
     if (_running) {

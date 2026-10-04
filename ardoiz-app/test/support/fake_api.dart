@@ -71,7 +71,7 @@ class FakeBackendApi implements BackendApi {
   Future<SessionTokens> login({required String phone, required String pin}) async {
     _enter('login');
     final account = accounts[phone];
-    if (account == null || account.pin != pin) throw const UnauthorizedException('Identifiants invalides');
+    if (account == null || account.pin != pin) throw const RejectedException(401, 'Identifiants invalides');
     return _issue(account);
   }
 
@@ -85,7 +85,7 @@ class FakeBackendApi implements BackendApi {
   Future<void> changePin({required String currentPin, required String newPin}) async {
     _enter('changePin');
     final account = accounts[signedInPhone]!;
-    if (account.pin != currentPin) throw const UnauthorizedException('PIN actuel incorrect');
+    if (account.pin != currentPin) throw const RejectedException(400, 'PIN actuel incorrect');
     account.pin = newPin;
     signedInPhone = null; // toutes les sessions sont révoquées
   }

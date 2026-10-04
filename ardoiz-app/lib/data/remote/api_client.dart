@@ -104,7 +104,10 @@ class ApiClient {
       }
       throw const UnauthorizedException();
     }
-    if (status == 401) throw const UnauthorizedException();
+    // 401 persistant sur une route protégée : la session est bien invalide.
+    if (status == 401 && !isPublic) throw const UnauthorizedException();
+    // 401 sur une route publique : identifiants refusés (mauvais PIN, compte
+    // verrouillé), avec le message du serveur. Ce n'est pas une session expirée.
     throw _fromResponse(status, response.data);
   }
 

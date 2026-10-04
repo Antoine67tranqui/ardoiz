@@ -311,9 +311,11 @@ export class AuthService {
   async changePin(userId: string, currentPin: string, newPin: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
+    // 400 et non 401 : un 401 signifie « session invalide » pour les clients,
+    // qui tenteraient alors de renouveler le jeton au lieu d'afficher l'erreur.
     const currentMatches = await bcrypt.compare(currentPin, user.pinHash);
     if (!currentMatches) {
-      throw new UnauthorizedException('PIN actuel incorrect');
+      throw new BadRequestException('PIN actuel incorrect');
     }
 
     const pinHash = await bcrypt.hash(newPin, PIN_SALT_ROUNDS);

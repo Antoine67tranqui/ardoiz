@@ -12,7 +12,9 @@ String describeError(Object error) {
   if (error is DomainException) return error.message;
   if (error is NetworkException) return 'Pas de connexion au serveur. Vérifiez votre réseau et réessayez.';
   if (error is UnauthorizedException) return error.message;
-  if (error is ServerException) return 'Le serveur est momentanément indisponible. Réessayez dans un instant.';
+  if (error is ServerException) {
+    return error.isFeatureUnavailable ? error.message : 'Le serveur est momentanément indisponible. Réessayez dans un instant.';
+  }
   if (error is RejectedException) return error.message;
   if (error is ApiException) return error.message;
   return 'Une erreur inattendue est survenue. Réessayez.';

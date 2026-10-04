@@ -201,6 +201,7 @@ describe('Relances, regles et abonnement (e2e)', () => {
       const before = await call('get', '/subscription/status', a);
       expect(before.body).toMatchObject({ plan: 'FREE', customerLimit: 15 });
 
+      expect((await call('get', '/subscription/status', a)).body.paymentsAvailable).toBe(true); // hors production : simulation
       const upgrade = await call('post', '/subscription/upgrade', a);
       expect(upgrade.body).toMatchObject({ activated: true, simulated: true });
 

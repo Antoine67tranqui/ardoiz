@@ -72,11 +72,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                     : 'Passer à Premium (${formatMoney(status.monthlyPrice)} / mois)',
                 icon: Icons.workspace_premium_outlined,
                 busy: _busy,
-                onPressed: () => _upgrade(status),
+                onPressed: status.paymentsAvailable ? () => _upgrade(status) : null,
               ),
               const SizedBox(height: 8),
               Text(
-                'Paiement par Mobile Money. Pas de renouvellement automatique : vous décidez à chaque fois.',
+                status.paymentsAvailable
+                    ? 'Paiement par Mobile Money. Pas de renouvellement automatique : vous décidez à chaque fois.'
+                    : 'Le paiement de l\'abonnement n\'est pas encore ouvert. Revenez bientôt : vos données et le plan gratuit ne changent pas.',
                 style: Theme.of(context).textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),

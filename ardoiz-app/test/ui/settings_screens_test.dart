@@ -383,6 +383,23 @@ void main() {
       verifyNever(() => env.api.profile());
     });
 
+    testWidgets('paiement pas encore ouvert sur le serveur : bouton désactivé et explication honnête', (tester) async {
+      when(() => env.api.subscriptionStatus()).thenAnswer((_) async => const SubscriptionStatus(
+            plan: Plan.free,
+            customerCount: 3,
+            customerLimit: 15,
+            monthlyPrice: Money.fromCents(200000),
+            paymentsAvailable: false,
+          ));
+      await pump(tester, initial: '/settings/subscription');
+
+      final button = find.widgetWithText(FilledButton, 'Passer à Premium (${formatMoney(const Money.fromCents(200000))} / mois)');
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      await reveal(tester, find.textContaining('n\'est pas encore ouvert'));
+      expect(find.textContaining('n\'est pas encore ouvert'), findsOneWidget);
+      verifyNever(() => env.api.upgrade());
+    });
+
     testWidgets('annulation de la confirmation : aucun paiement', (tester) async {
       when(() => env.api.subscriptionStatus()).thenAnswer((_) async => free());
       await pump(tester, initial: '/settings/subscription');

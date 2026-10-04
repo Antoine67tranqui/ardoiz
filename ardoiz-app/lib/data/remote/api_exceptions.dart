@@ -16,9 +16,15 @@ final class NetworkException extends ApiException {
 
 /// Erreur serveur (5xx) ou surcharge (429, 408) : réessayer plus tard.
 final class ServerException extends ApiException {
-  const ServerException(this.statusCode, [super.message = 'Le serveur est momentanément indisponible.']);
+  const ServerException(this.statusCode, [super.message = 'Le serveur est momentanément indisponible.', this.code]);
 
   final int statusCode;
+
+  /// Code métier (ex. FEATURE_UNAVAILABLE : fonctionnalité pas encore ouverte, inutile de réessayer).
+  final String? code;
+
+  /// Le serveur explique lui-même pourquoi (message destiné au commerçant).
+  bool get isFeatureUnavailable => code == 'FEATURE_UNAVAILABLE';
 }
 
 /// Session invalide ou révoquée (le rafraîchissement du jeton a échoué).

@@ -492,6 +492,21 @@ void main() {
       verifyNever(() => env.api.requestMobileMoneyPayment(any()));
     });
 
+    testWidgets('fonctionnalité pas encore ouverte (FEATURE_UNAVAILABLE) : affiche le message du serveur, sans suggérer de réessayer', (tester) async {
+      final customer = addCustomer();
+      final debt = addDebt(customer, 5000, synced: true);
+      when(() => env.api.requestMobileMoneyPayment(any()))
+          .thenThrow(const ServerException(503, 'Le paiement Mobile Money n\'est pas encore disponible.', 'FEATURE_UNAVAILABLE'));
+      await pump(tester, initial: '/debts/$debt');
+
+      await tester.tap(find.text('Demander un paiement Mobile Money'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Envoyer la demande'));
+      await tester.pumpAndSettle();
+      expect(find.text('Le paiement Mobile Money n\'est pas encore disponible.'), findsOneWidget);
+      expect(find.textContaining('Réessayez'), findsNothing);
+    });
+
     testWidgets('service indisponible (5xx) : message sans détail technique', (tester) async {
       final customer = addCustomer();
       final debt = addDebt(customer, 5000, synced: true);

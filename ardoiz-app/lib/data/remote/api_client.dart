@@ -181,7 +181,7 @@ class ApiClient {
       }
     }
     if (status >= 500 || status == 429 || status == 408 || status == 425) {
-      return ServerException(status, message);
+      return ServerException(status, message, code);
     }
     return RejectedException(status, message, code: code);
   }

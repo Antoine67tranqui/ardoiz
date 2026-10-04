@@ -78,7 +78,36 @@ describe('Comportement en production (e2e)', () => {
       .set('Authorization', `Bearer ${accessToken}`);
 
     expect(res.status).toBe(503);
+    expect(res.body.message).toMatchObject({ code: 'FEATURE_UNAVAILABLE' });
     expect((await ctx.prisma.user.findUniqueOrThrow({ where: { id: user.id } })).plan).toBe('FREE');
+  });
+
+  it("ne simule jamais une demande de paiement Mobile Money : 503 explicite, rien n'est envoye", async () => {
+    const user = await ctx.prisma.user.create({ data: { phone: '+2290167000296', pinHash: 'x', businessName: 'Boutique Prod' } });
+    const customer = await ctx.prisma.customer.create({ data: { userId: user.id, name: 'Aicha', phone: '+229 01 67 07 70 27' } });
+    const debt = await ctx.prisma.debt.create({ data: { customerId: customer.id, amount: '1000' } });
+    const accessToken = ctx.app.get(JwtService).sign({ sub: user.id, phone: user.phone, tokenVersion: 0 }, { secret: process.env.JWT_ACCESS_SECRET });
+
+    const res = await ctx
+      .http()
+      .post('/api/v1/payments/momo-request')
+      .set('X-Forwarded-For', freshIp())
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ debtId: debt.id });
+
+    expect(res.status).toBe(503);
+    expect(res.body.message).toMatchObject({ code: 'FEATURE_UNAVAILABLE' });
+    expect(res.body.simulated).toBeUndefined();
+  });
+
+  it("annonce au client que les paiements ne sont pas disponibles (paymentsAvailable = false)", async () => {
+    const user = await ctx.prisma.user.create({ data: { phone: '+2290167000295', pinHash: 'x', businessName: 'Boutique Prod' } });
+    const accessToken = ctx.app.get(JwtService).sign({ sub: user.id, phone: user.phone, tokenVersion: 0 }, { secret: process.env.JWT_ACCESS_SECRET });
+
+    const res = await ctx.http().get('/api/v1/subscription/status').set('X-Forwarded-For', freshIp()).set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.paymentsAvailable).toBe(false);
   });
 
   it('refuse de demarrer avec un secret copie de .env.example', () => {

@@ -63,6 +63,21 @@ void main() {
       expect(client.send('GET', '/customers'), throwsA(isA<NetworkException>()));
     });
 
+    test('503 avec code FEATURE_UNAVAILABLE : le message du serveur est conservé et le code exposé', () async {
+      await signedIn();
+      build(
+        onApi: (r) => ScriptedResponse(503, {
+          'message': {'code': 'FEATURE_UNAVAILABLE', 'message': 'Le paiement Mobile Money n\'est pas encore disponible.'},
+        }),
+      );
+      await expectLater(
+        client.send('POST', '/payments/momo-request', body: {'debtId': 'd'}),
+        throwsA(isA<ServerException>()
+            .having((e) => e.isFeatureUnavailable, 'indisponible', isTrue)
+            .having((e) => e.message, 'message', 'Le paiement Mobile Money n\'est pas encore disponible.')),
+      );
+    });
+
     test('5xx, 429, 408 : ServerException (à réessayer)', () async {
       for (final status in [500, 502, 503, 429, 408]) {
         build(onApi: (r) => ScriptedResponse(status, {'message': 'oups'}));

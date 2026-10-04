@@ -36,6 +36,7 @@ class SubscriptionStatus {
     required this.monthlyPrice,
     this.planExpiresAt,
     this.customerLimit,
+    this.paymentsAvailable = true,
   });
 
   final Plan plan;
@@ -45,6 +46,9 @@ class SubscriptionStatus {
   /// Null = clients illimités (Premium).
   final int? customerLimit;
   final Money monthlyPrice;
+
+  /// Faux tant que le paiement Mobile Money n'est pas ouvert sur ce serveur.
+  final bool paymentsAvailable;
 }
 
 class UpgradeResult {
@@ -244,6 +248,7 @@ class HttpBackendApi implements BackendApi {
           customerCount: json['customerCount']! as int,
           customerLimit: json['customerLimit'] as int?,
           monthlyPrice: Money.fromJson(json['monthlyPriceFcfa']! as num),
+          paymentsAvailable: json['paymentsAvailable'] as bool? ?? true,
         ));
   }
 

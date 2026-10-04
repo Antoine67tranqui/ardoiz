@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MobileMoneyService } from '../payments/mobile-money.service';
 import { isPremiumActive } from './subscription.utils';
@@ -18,7 +13,6 @@ export class SubscriptionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mobileMoneyService: MobileMoneyService,
-    private readonly config: ConfigService,
   ) {}
 
   async getStatus(userId: string) {
@@ -32,6 +26,7 @@ export class SubscriptionService {
       customerCount,
       customerLimit: isPremium ? null : FREE_PLAN_CUSTOMER_LIMIT,
       monthlyPriceFcfa: PREMIUM_MONTHLY_PRICE_FCFA,
+      paymentsAvailable: this.mobileMoneyService.isOperational(),
     };
   }
 
@@ -49,17 +44,9 @@ export class SubscriptionService {
     }
 
     // L'activation "simulee" ci-dessous offre Premium sans paiement : elle ne
-    // doit exister qu'en dev/test. En production, un MOMO_API_KEY absent (oubli
-    // ou erreur de configuration) ferait de cet endpoint un Premium gratuit
-    // pour tout utilisateur connecte.
-    if (
-      this.config.get<string>('NODE_ENV') === 'production' &&
-      !this.mobileMoneyService.isConfigured()
-    ) {
-      throw new ServiceUnavailableException(
-        "Le paiement de l'abonnement n'est pas disponible pour le moment.",
-      );
-    }
+    // doit exister qu'en dev/test (assertOperational refuse en production tant
+    // qu'aucun agregateur reel n'est branche).
+    this.mobileMoneyService.assertOperational();
 
     const result = await this.mobileMoneyService.requestPayment({
       phone: user.phone,

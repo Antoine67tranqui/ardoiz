@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { ExportModule } from './export/export.module';
+import { SyncModule } from './sync/sync.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -39,6 +40,7 @@ import { HealthController } from './health/health.controller';
     DashboardModule,
     SubscriptionModule,
     ExportModule,
+    SyncModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { outstandingOf, sumAmounts } from '../common/money';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Echappe une valeur pour un champ CSV (RFC 4180). */
@@ -56,11 +57,8 @@ export class ExportService {
     ];
 
     const rows = debts.map((debt) => {
-      const totalPaid = debt.payments.reduce(
-        (sum, p) => sum.plus(p.amount),
-        new Prisma.Decimal(0),
-      );
-      const outstanding = Prisma.Decimal.max(0, new Prisma.Decimal(debt.amount).minus(totalPaid));
+      const totalPaid = sumAmounts(debt.payments);
+      const outstanding = outstandingOf(debt.amount, debt.payments);
       const lastPayment = debt.payments.sort(
         (a, b) => b.paidAt.getTime() - a.paidAt.getTime(),
       )[0];

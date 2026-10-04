@@ -1,9 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { MAX_AMOUNT_FCFA } from '../../common/constants';
 
 export class CreateCustomerDto {
+  @ApiPropertyOptional({
+    description:
+      "Identifiant genere par le client (UUID v4) : rend la creation idempotente, un meme envoi rejoue apres une coupure reseau ne cree jamais de doublon",
+  })
+  @IsOptional()
+  @IsUUID('4')
+  id?: string;
+
   @ApiProperty({ example: 'Aicha Traore' })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()

@@ -3,6 +3,14 @@ import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, M
 import { MAX_AMOUNT_FCFA } from '../../common/constants';
 
 export class CreateDebtDto {
+  @ApiPropertyOptional({
+    description:
+      "Identifiant genere par le client (UUID v4) : rend la creation idempotente, un meme envoi rejoue apres une coupure reseau ne cree jamais de doublon",
+  })
+  @IsOptional()
+  @IsUUID('4')
+  id?: string;
+
   @ApiProperty({ description: 'Identifiant du client concerne' })
   @IsUUID()
   customerId!: string;
@@ -29,4 +37,9 @@ export class CreateDebtDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string;
+
+  @ApiPropertyOptional({ description: "Date de saisie sur l'appareil (borne a [maintenant - 366 jours ; maintenant])" })
+  @IsOptional()
+  @IsDateString()
+  createdAt?: string;
 }

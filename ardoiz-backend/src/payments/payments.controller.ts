@@ -1,5 +1,15 @@
-import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  HttpStatus,
+  Param,
+  Post,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -9,6 +19,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { RequestMomoPaymentDto } from './dto/request-momo-payment.dto';
 import { MobileMoneyService } from './mobile-money.service';
 import { DebtsService } from '../debts/debts.service';
+import { outstandingOf } from '../common/money';
 
 @ApiTags('payments')
 @ApiBearerAuth()
@@ -21,9 +32,21 @@ export class PaymentsController {
     private readonly debtsService: DebtsService,
   ) {}
 
+  /** 201 a la creation, 200 si un envoi rejoue (meme `id` client) renvoie le paiement existant. */
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.createManual(user.id, dto);
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreatePaymentDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { payment, created } = await this.paymentsService.createManual(user.id, dto);
+    if (!created) res.status(HttpStatus.OK);
+    return payment;
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.paymentsService.remove(user.id, id);
   }
 
   @Post('momo-request')
@@ -36,11 +59,10 @@ export class PaymentsController {
       throw new BadRequestException("Ce client n'a pas de numero de telephone enregistre");
     }
 
-    const totalPaid = debt.payments.reduce(
-      (sum, p) => sum.plus(p.amount),
-      new Prisma.Decimal(0),
-    );
-    const outstanding = new Prisma.Decimal(debt.amount).minus(totalPaid);
+    const outstanding = outstandingOf(debt.amount, debt.payments);
+    if (outstanding.lessThanOrEqualTo(0)) {
+      throw new BadRequestException('Cette dette est deja soldee');
+    }
 
     return this.mobileMoneyService.requestPayment({
       phone: debt.customer.phone,

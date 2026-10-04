@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { outstandingOf } from '../common/money';
 import { isPremiumActive } from '../subscription/subscription.utils';
 
 export interface CategoryBreakdown {
@@ -73,14 +74,7 @@ export class DashboardService {
     const customersWithDebt = new Set<string>();
 
     for (const debt of debts) {
-      const totalPaid = debt.payments.reduce(
-        (sum, p) => sum.plus(p.amount),
-        new Prisma.Decimal(0),
-      );
-      const outstandingDec = Prisma.Decimal.max(
-        0,
-        new Prisma.Decimal(debt.amount).minus(totalPaid),
-      );
+      const outstandingDec = outstandingOf(debt.amount, debt.payments);
       totalOutstandingDec = totalOutstandingDec.plus(outstandingDec);
       if (outstandingDec.greaterThan(0)) customersWithDebt.add(debt.customerId);
 

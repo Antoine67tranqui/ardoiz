@@ -1,4 +1,4 @@
-package com.ardoiz.ardoiz
+package com.carne.app
 
 import io.flutter.embedding.android.FlutterActivity
 

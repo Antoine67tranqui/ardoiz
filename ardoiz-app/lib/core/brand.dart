@@ -19,6 +19,10 @@ class Brand {
   static const Color paper = Color(0xFFFBF8F1);
   static const Color ink = Color(0xFF1C2B27);
 
+  /// Or du logo (reliure du carnet) : décoratif, jamais utilisé pour du texte.
+  static const Color gold = Color(0xFFE3A53A);
+  static const Color logoLine = Color(0xFFC9DDD6);
+
   // États d'une dette : jamais la couleur seule (toujours un texte ou une icône).
   static const Color paid = Color(0xFF1E7B4F);
   static const Color partial = Color(0xFF8F5A00);

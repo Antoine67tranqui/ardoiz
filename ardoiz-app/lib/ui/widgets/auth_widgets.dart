@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../../core/brand.dart';
 
-/// Pastille de marque (logo provisoire : un carnet).
+/// Logo Carné : un carnet à anneaux avec une coche, sur fond vert. Même dessin
+/// que `brand/logo-mark.svg` (mêmes coordonnées, base 1024).
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 72});
 
@@ -11,16 +12,49 @@ class BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: Brand.forest,
-            borderRadius: BorderRadius.circular(size * 0.28),
-          ),
-          child: Icon(Icons.menu_book_rounded, color: Colors.white, size: size * 0.56),
-        ),
+        child: CustomPaint(size: Size.square(size), painter: const CarneLogoPainter()),
       );
+}
+
+class CarneLogoPainter extends CustomPainter {
+  const CarneLogoPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 1024, size.height / 1024);
+    final fill = Paint()..style = PaintingStyle.fill;
+
+    RRect rrect(double x, double y, double w, double h, double r) =>
+        RRect.fromRectAndRadius(Rect.fromLTWH(x, y, w, h), Radius.circular(r));
+
+    canvas.drawRRect(rrect(0, 0, 1024, 1024, 230), fill..color = Brand.forest);
+    canvas.drawRRect(rrect(262, 196, 500, 632, 56), fill..color = Brand.paper);
+    canvas.drawRRect(rrect(262, 196, 104, 632, 56), fill..color = Brand.gold);
+    canvas.drawRect(const Rect.fromLTWH(318, 196, 48, 632), fill);
+    fill.color = Brand.forest;
+    for (final y in <double>[330, 512, 694]) {
+      canvas.drawCircle(Offset(314, y), 26, fill);
+    }
+    final check = Path()
+      ..moveTo(452, 470)
+      ..lineTo(548, 566)
+      ..lineTo(690, 392);
+    canvas.drawPath(
+      check,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 56
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = Brand.forest,
+    );
+    fill.color = Brand.logoLine;
+    canvas.drawRRect(rrect(452, 650, 238, 26, 13), fill);
+    canvas.drawRRect(rrect(452, 716, 160, 26, 13), fill);
+  }
+
+  @override
+  bool shouldRepaint(CarneLogoPainter oldDelegate) => false;
 }
 
 /// Coque commune des écrans d'accès : défilement, largeur bornée, marque.

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="t">
+  <title id="t">Carné</title>
+  <rect width="1024" height="1024" rx="230" fill="#0B5D4B"/>
+  <!-- carnet : feuille, reliure à anneaux, coche -->
+  <rect x="262" y="196" width="500" height="632" rx="56" fill="#FBF8F1"/>
+  <rect x="262" y="196" width="104" height="632" rx="56" fill="#E3A53A"/>
+  <rect x="318" y="196" width="48" height="632" fill="#E3A53A"/>
+  <circle cx="314" cy="330" r="26" fill="#0B5D4B"/>
+  <circle cx="314" cy="512" r="26" fill="#0B5D4B"/>
+  <circle cx="314" cy="694" r="26" fill="#0B5D4B"/>
+  <path d="M452 470 L548 566 L690 392" fill="none" stroke="#0B5D4B" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="452" y="650" width="238" height="26" rx="13" fill="#C9DDD6"/>
+  <rect x="452" y="716" width="160" height="26" rx="13" fill="#C9DDD6"/>
+</svg>

@@ -264,7 +264,7 @@ describe('Logique metier (e2e)', () => {
       const res = await call('get', '/export/history', a);
       expect(res.status).toBe(200);
       expect(res.headers['content-type']).toContain('text/csv');
-      expect(res.headers['content-disposition']).toMatch(/attachment; filename="ardoiz-historique-\d{4}-\d{2}-\d{2}\.csv"/);
+      expect(res.headers['content-disposition']).toMatch(/attachment; filename="carne-historique-\d{4}-\d{2}-\d{2}\.csv"/);
 
       expect(res.text.charCodeAt(0)).toBe(0xfeff);
       const lines = res.text.slice(1).split('\r\n');

@@ -64,6 +64,29 @@ describe('Relances, regles et abonnement (e2e)', () => {
       expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ amount: '1500', customerName: 'Aicha Traore', businessName: 'Boutique A' }));
     });
 
+    it('reclame le RESTE a payer (apres un paiement partiel), pas le montant initial', async () => {
+      const customer = await customerFor(a.userId);
+      const debt = await debtFor(customer.id, '5000', null);
+      await ctx.prisma.payment.create({ data: { debtId: debt.id, amount: '1250.5', method: 'CASH' } });
+
+      const res = await call('post', `/debts/${debt.id}/reminders`, a, {});
+
+      expect(res.status).toBe(201);
+      expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ amount: '3749.5' }));
+    });
+
+    it('refuse de relancer une dette deja soldee (400, rien envoye ni journalise)', async () => {
+      const customer = await customerFor(a.userId);
+      const debt = await debtFor(customer.id, '1000', null);
+      await ctx.prisma.payment.create({ data: { debtId: debt.id, amount: '1000', method: 'CASH' } });
+
+      const res = await call('post', `/debts/${debt.id}/reminders`, a, {});
+
+      expect(res.status).toBe(400);
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(await ctx.prisma.reminder.count()).toBe(0);
+    });
+
     it("marque la relance FAILED (sans erreur 500) quand le fournisseur d'envoi echoue", async () => {
       sendSpy.mockRejectedValueOnce(new Error('fournisseur SMS indisponible'));
       const customer = await customerFor(a.userId);

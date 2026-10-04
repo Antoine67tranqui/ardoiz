@@ -8,7 +8,7 @@ async function bootstrap() {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle('Ardoiz API')
+    .setTitle('Carné API')
     .setDescription(
       "API de gestion digitale du credit informel (l'ardoise) pour les commercants d'Afrique de l'Ouest",
     )

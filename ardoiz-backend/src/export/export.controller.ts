@@ -24,7 +24,7 @@ export class ExportController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="ardoiz-historique-${date}.csv"`,
+      `attachment; filename="carne-historique-${date}.csv"`,
     );
     res.send(csv);
   }

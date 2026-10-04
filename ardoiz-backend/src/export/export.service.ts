@@ -31,7 +31,7 @@ export class ExportService {
    * Genere l'historique complet (une ligne par dette/"ardoise") du
    * commercant au format CSV, pour lui permettre de garder une trace
    * exportable de toutes les entrees (dettes) et sorties (remboursements)
-   * enregistrees dans l'app, independamment d'Ardoiz.
+   * enregistrees dans l'app, independamment de Carne.
    */
   async generateHistoryCsv(userId: string): Promise<string> {
     const debts = await this.prisma.debt.findMany({

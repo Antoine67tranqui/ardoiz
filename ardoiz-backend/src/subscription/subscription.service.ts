@@ -66,7 +66,7 @@ export class SubscriptionService {
       amount: PREMIUM_MONTHLY_PRICE_FCFA,
       debtId: `subscription-${userId}`,
       customerName: user.businessName,
-      businessName: 'Ardoiz',
+      businessName: 'Carné',
     });
 
     if (result.simulated) {

@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ReminderChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DebtsService } from '../debts/debts.service';
+import { outstandingOf } from '../common/money';
 
 @Injectable()
 export class RemindersService {
@@ -21,6 +22,10 @@ export class RemindersService {
     channel: ReminderChannel = 'SMS',
   ) {
     const debt = await this.debtsService.getOwnedDebt(userId, debtId);
+    // Relancer une dette soldee enverrait un message de reclamation a tort.
+    if (outstandingOf(debt.amount, debt.payments).lessThanOrEqualTo(0)) {
+      throw new BadRequestException('Cette dette est deja soldee');
+    }
     return this.dispatchReminder(debt.id, channel);
   }
 
@@ -89,7 +94,7 @@ export class RemindersService {
   ) {
     const debt = await this.prisma.debt.findUniqueOrThrow({
       where: { id: debtId },
-      include: { customer: { include: { user: true } } },
+      include: { customer: { include: { user: true } }, payments: true },
     });
 
     const reminder = await this.prisma.reminder.create({
@@ -109,7 +114,9 @@ export class RemindersService {
         phone: debt.customer.phone,
         channel,
         customerName: debt.customer.name,
-        amount: Number(debt.amount).toString(),
+        // Le reste a payer, pas le montant initial : apres un paiement partiel,
+        // reclamer la somme d'origine serait faux et ferait perdre la confiance du client.
+        amount: outstandingOf(debt.amount, debt.payments).toString(),
         businessName: debt.customer.user.businessName,
         tone,
       });

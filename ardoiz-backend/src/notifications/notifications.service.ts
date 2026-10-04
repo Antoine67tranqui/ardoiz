@@ -21,7 +21,7 @@ export class NotificationsService {
   }
 
   async sendOtp(phone: string, code: string): Promise<void> {
-    await this.sendSms(phone, `Ardoiz: votre code de verification est ${code}. Valable 5 minutes.`);
+    await this.sendSms(phone, `Carné: votre code de verification est ${code}. Valable 5 minutes.`);
   }
 
   async sendDebtReminder(params: {

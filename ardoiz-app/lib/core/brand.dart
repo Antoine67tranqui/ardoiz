@@ -7,6 +7,9 @@ class Brand {
   static const String name = 'Carné';
   static const String tagline = 'Le carnet de crédit de votre commerce';
 
+  /// Doit correspondre à `version:` de pubspec.yaml (vérifié par un test).
+  static const String version = '0.2.0';
+
   // Vert profond (confiance, argent) et ocre (chaleur, terre d'Afrique de
   // l'Ouest), sur un fond « papier de carnet » : les couleurs dominantes du
   // marché régional (orange, jaune, bleu des opérateurs Mobile Money) sont ainsi évitées.

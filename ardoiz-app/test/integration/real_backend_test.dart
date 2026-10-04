@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:ardoiz/core/money.dart';
+import 'package:ardoiz/domain/dashboard.dart';
 import 'package:ardoiz/data/local/app_database.dart';
 import 'package:ardoiz/data/local/ledger_store.dart';
 import 'package:ardoiz/data/local/outbox_store.dart';
@@ -301,6 +302,54 @@ void main() {
 
     final csv = await api.exportHistory();
     expect(String.fromCharCodes(csv.bytes), contains('Aicha'));
+  });
+
+  test('le tableau de bord calculé sur l\'appareil donne les mêmes chiffres que le serveur', skip: skip, () async {
+    final owner = await signUp();
+    final a = RealDevice(owner.client, owner.tokens);
+    final now = DateTime.now();
+    DateTime ago(int days) => now.subtract(Duration(days: days));
+
+    final aicha = a.repo.addCustomer(name: 'Aicha', phone: customerPhone);
+    final bako = a.repo.addCustomer(name: 'Bako', phone: customerPhone);
+    final chantal = a.repo.addCustomer(name: 'Chantal', phone: customerPhone);
+
+    a.repo.addDebt(customerId: aicha.id, amount: fcfa(5000), category: 'Alimentation', dueDate: ago(10));
+    final late2 = a.repo.addDebt(customerId: aicha.id, amount: fcfa(2000), category: 'Boissons', dueDate: ago(4));
+    a.repo.addPayment(debtId: late2.id, amount: fcfa(500), paidAt: ago(1));
+    final paidOnTime = a.repo.addDebt(customerId: bako.id, amount: fcfa(1000), category: 'Alimentation', dueDate: now.add(const Duration(days: 5)));
+    a.repo.addPayment(debtId: paidOnTime.id, amount: fcfa(1000), paidAt: ago(40));
+    final paidLate = a.repo.addDebt(customerId: bako.id, amount: fcfa(1500), dueDate: ago(20));
+    a.repo.addPayment(debtId: paidLate.id, amount: fcfa(1500), paidAt: ago(2));
+    a.repo.addDebt(customerId: chantal.id, amount: fcfa(750), category: 'Hygiène', dueDate: now.add(const Duration(days: 30)));
+    a.repo.addDebt(customerId: chantal.id, amount: fcfa(300));
+    await a.sync();
+    expect(a.outbox.count(), 0);
+
+    await owner.api.upgrade();
+    final server = await owner.api.dashboard();
+    final local = DashboardCalculator.compute(a.repo.customers(), DateTime.now());
+
+    expect(local.totalOutstanding, server.totalOutstanding);
+    expect(local.totalCustomers, server.totalCustomers);
+    expect(local.customersWithDebt, server.customersWithDebt);
+    expect(local.recoveryRate, server.recoveryRate);
+    expect(
+      {for (final c in local.byCategory) c.category: (c.outstanding, c.count)},
+      {for (final c in server.byCategory) c.category: (c.outstanding, c.count)},
+    );
+    expect(
+      local.overdue.map((o) => (o.customerName, o.outstanding, o.daysOverdue, o.category)).toList(),
+      server.overdue.map((o) => (o.customerName, o.outstanding, o.daysOverdue, o.category)).toList(),
+    );
+    expect(
+      local.atRisk.map((r) => (r.customerName, r.overdueCount, r.overdueAmount, r.maxDaysOverdue)).toList(),
+      server.atRisk.map((r) => (r.customerName, r.overdueCount, r.overdueAmount, r.maxDaysOverdue)).toList(),
+    );
+    expect(
+      local.trend.map((t) => (t.month, t.granted, t.recovered)).toList(),
+      server.trend.map((t) => (t.month, t.granted, t.recovered)).toList(),
+    );
   });
 
   test('connexion par PIN, changement de PIN et révocation', skip: skip, () async {

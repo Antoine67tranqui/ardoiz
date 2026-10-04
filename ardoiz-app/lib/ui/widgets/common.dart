@@ -73,6 +73,28 @@ class MoneyText extends StatelessWidget {
   }
 }
 
+/// Montant placé dans une ligne : il garde sa lisibilité en se réduisant au lieu
+/// de déborder (grands montants, texte agrandi), et ne prend jamais plus de
+/// [maxFraction] de la largeur de l'écran.
+class AmountBox extends StatelessWidget {
+  const AmountBox(this.amount, {super.key, this.style, this.color, this.maxFraction = 0.45});
+
+  final Money amount;
+  final TextStyle? style;
+  final Color? color;
+  final double maxFraction;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * maxFraction),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerRight,
+          child: MoneyText(amount, style: style, color: color),
+        ),
+      );
+}
+
 class AppAvatar extends StatelessWidget {
   const AppAvatar(this.name, {super.key, this.radius = 22});
 

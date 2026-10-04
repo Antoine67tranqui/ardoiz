@@ -237,7 +237,7 @@ class _DebtTile extends StatelessWidget {
                   Expanded(child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleMedium)),
                   if (view.pendingSync) ...<Widget>[const SizedBox(width: 6), const PendingSyncIcon()],
                   const SizedBox(width: 8),
-                  MoneyText(settled ? debt.amount : view.remaining, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  AmountBox(settled ? debt.amount : view.remaining, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 ],
               ),
               const SizedBox(height: 4),

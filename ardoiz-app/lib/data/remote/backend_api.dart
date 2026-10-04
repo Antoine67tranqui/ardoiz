@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../core/money.dart';
+import '../../domain/dashboard.dart';
 import 'api_client.dart';
 import 'api_exceptions.dart';
 
@@ -22,6 +23,10 @@ class Profile {
   final DateTime? planExpiresAt;
 
   bool get isPremium => plan == Plan.premium;
+
+  /// Premium encore valide à [now] (l'expiration est vérifiée aussi hors ligne :
+  /// le profil en cache ne doit pas rester Premium indéfiniment).
+  bool isPremiumAt(DateTime now) => plan == Plan.premium && (planExpiresAt == null || planExpiresAt!.isAfter(now));
 }
 
 class SubscriptionStatus {
@@ -130,81 +135,6 @@ class MomoRequestResult {
   final String reference;
   final bool simulated;
   final String message;
-}
-
-class CategoryBreakdown {
-  const CategoryBreakdown({required this.category, required this.outstanding, required this.count});
-
-  final String category;
-  final Money outstanding;
-  final int count;
-}
-
-class OverdueItem {
-  const OverdueItem({
-    required this.debtId,
-    required this.customerId,
-    required this.customerName,
-    required this.outstanding,
-    required this.daysOverdue,
-    required this.category,
-  });
-
-  final String debtId;
-  final String customerId;
-  final String customerName;
-  final Money outstanding;
-  final int daysOverdue;
-  final String category;
-}
-
-class AtRiskCustomer {
-  const AtRiskCustomer({
-    required this.customerId,
-    required this.customerName,
-    required this.overdueCount,
-    required this.overdueAmount,
-    required this.maxDaysOverdue,
-  });
-
-  final String customerId;
-  final String customerName;
-  final int overdueCount;
-  final Money overdueAmount;
-  final int maxDaysOverdue;
-}
-
-class TrendPoint {
-  const TrendPoint({required this.month, required this.granted, required this.recovered});
-
-  /// « 2026-10 ».
-  final String month;
-  final Money granted;
-  final Money recovered;
-}
-
-class DashboardSummary {
-  const DashboardSummary({
-    required this.totalOutstanding,
-    required this.totalCustomers,
-    required this.customersWithDebt,
-    required this.byCategory,
-    required this.overdue,
-    required this.atRisk,
-    required this.trend,
-    this.recoveryRate,
-  });
-
-  final Money totalOutstanding;
-  final int totalCustomers;
-  final int customersWithDebt;
-  final List<CategoryBreakdown> byCategory;
-  final List<OverdueItem> overdue;
-  final List<AtRiskCustomer> atRisk;
-  final List<TrendPoint> trend;
-
-  /// Part des dettes soldées payées à temps (0 à 1), null si aucune dette soldée.
-  final double? recoveryRate;
 }
 
 /// Fichier téléchargé (export CSV).

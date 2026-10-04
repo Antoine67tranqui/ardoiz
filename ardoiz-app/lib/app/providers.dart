@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/clock.dart';
@@ -11,6 +15,7 @@ import '../data/remote/token_store.dart';
 import '../data/repositories/ledger_repository.dart';
 import '../data/sync/ledger_transport.dart';
 import '../data/sync/sync_engine.dart';
+import '../domain/dashboard.dart';
 import '../domain/models.dart';
 import 'connectivity.dart';
 import 'session_service.dart';
@@ -171,6 +176,19 @@ final debtByIdProvider = Provider.family<DebtView?, String>((ref, id) {
   return null;
 });
 
+/// Premium valide maintenant (expiration vérifiée même hors ligne).
+final Provider<bool> isPremiumProvider = Provider<bool>((ref) {
+  final session = ref.watch(sessionProvider);
+  return session is SignedIn && session.profile.isPremiumAt(ref.watch(clockProvider)());
+});
+
+/// Tableau de bord calculé sur l'appareil (fonctionne hors connexion).
+final Provider<DashboardSummary?> dashboardProvider = Provider<DashboardSummary?>((ref) {
+  final customers = ref.watch(customersProvider).value;
+  if (customers == null) return null;
+  return DashboardCalculator.compute(customers, ref.watch(clockProvider)());
+});
+
 // ---- Plateforme ----
 
 /// Ouverture de liens externes (appel, WhatsApp) ; simulée dans les tests.
@@ -186,6 +204,42 @@ class PluginUrlOpener implements UrlOpener {
 }
 
 final Provider<UrlOpener> urlOpenerProvider = Provider<UrlOpener>((ref) => const PluginUrlOpener());
+
+/// Partage d'un fichier (export CSV) ; simulé dans les tests.
+abstract interface class FileSharer {
+  Future<void> share({required String fileName, required List<int> bytes, required String mimeType});
+}
+
+class PluginFileSharer implements FileSharer {
+  const PluginFileSharer();
+
+  /// Le fichier contient les noms et numéros des clients : il est écrit dans le
+  /// dossier temporaire puis supprimé dès le partage terminé.
+  @override
+  Future<void> share({required String fileName, required List<int> bytes, required String mimeType}) async {
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/$fileName');
+    await file.writeAsBytes(bytes, flush: true);
+    try {
+      await SharePlus.instance.share(ShareParams(files: <XFile>[XFile(file.path, mimeType: mimeType)], subject: fileName));
+    } finally {
+      if (file.existsSync()) await file.delete();
+    }
+  }
+}
+
+final Provider<FileSharer> fileSharerProvider = Provider<FileSharer>((ref) => const PluginFileSharer());
+
+// ---- Données du serveur (en ligne) ----
+
+final subscriptionStatusProvider =
+    FutureProvider.autoDispose<SubscriptionStatus>((ref) => ref.watch(backendApiProvider).subscriptionStatus());
+
+final reminderRulesProvider =
+    FutureProvider.autoDispose<List<ReminderRule>>((ref) => ref.watch(backendApiProvider).reminderRules());
+
+final syncIssuesProvider =
+    StreamProvider.autoDispose<List<SyncIssue>>((ref) => ref.watch(repositoryProvider).watchIssues());
 
 /// Limite de clients du plan gratuit (identique au serveur).
 const int freePlanCustomerLimit = 15;

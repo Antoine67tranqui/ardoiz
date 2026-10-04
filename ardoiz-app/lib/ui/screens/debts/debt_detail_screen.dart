@@ -362,17 +362,32 @@ class _PaymentTile extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) => Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: ListTile(
-          leading: Icon(payment.method == PaymentMethod.momo ? Icons.phone_android : Icons.payments_outlined),
-          title: MoneyText(payment.amount, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          subtitle: Text('${payment.method.label} · ${formatDate(payment.paidAt)}'),
-          trailing: IconButton(
-            tooltip: 'Supprimer ce paiement',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: onDelete,
-          ),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+        child: Row(
+          children: <Widget>[
+            Icon(payment.method == PaymentMethod.momo ? Icons.phone_android : Icons.payments_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: AmountBox(payment.amount, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                  Text('${payment.method.label} · ${formatDate(payment.paidAt)}', style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+            IconButton(tooltip: 'Supprimer ce paiement', icon: const Icon(Icons.delete_outline), onPressed: onDelete),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

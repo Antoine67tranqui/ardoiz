@@ -56,3 +56,9 @@ String formatMoneyInput(Money amount) {
   final sign = amount.cents < 0 ? '-' : '';
   return fraction == 0 ? '$sign$whole' : '$sign$whole,${fraction.toString().padLeft(2, '0')}';
 }
+
+/// « 14:05 » (heure locale de l'appareil).
+String formatTime(DateTime date) {
+  final local = date.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+}

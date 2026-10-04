@@ -241,18 +241,10 @@ class CustomerTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Le montant garde sa taille ; le nom cède la place (jamais l'inverse).
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.45),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: MoneyText(
-                    view.outstanding,
-                    color: balanceColor,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                ),
+              AmountBox(
+                view.outstanding,
+                color: balanceColor,
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),

@@ -325,6 +325,13 @@ class LedgerRepository {
         return SyncIssue(entry: entry, title: _describe(entry), reason: entry.lastError ?? 'Refusé par le serveur.');
       }).toList();
 
+  Stream<List<SyncIssue>> watchIssues() async* {
+    yield issues();
+    await for (final _ in _db.changes) {
+      yield issues();
+    }
+  }
+
   void retryIssue(OutboxEntry entry) => _outbox.retry(entry);
 
   /// Abandonne une opération refusée : annule ses effets locaux (une création

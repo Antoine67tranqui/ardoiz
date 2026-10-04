@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/providers.dart';
 import '../../../app/routes.dart';
-import '../../../app/session_service.dart';
 import '../../../core/formatters.dart';
 import '../../../core/money.dart';
 import '../../../core/validators.dart';
@@ -78,8 +77,7 @@ class _CustomerFormScreenState extends ConsumerState<CustomerFormScreen> {
   @override
   Widget build(BuildContext context) {
     final customers = ref.watch(customersProvider).value;
-    final session = ref.watch(sessionProvider);
-    final isPremium = session is SignedIn && session.profile.isPremium;
+    final isPremium = ref.watch(isPremiumProvider);
 
     if (_editing) {
       if (customers == null) return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));

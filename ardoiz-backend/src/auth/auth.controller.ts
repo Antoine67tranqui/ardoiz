@@ -17,10 +17,10 @@ import { AuthenticatedUser } from './strategies/jwt.strategy';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // 3 demandes / 5 min par IP : une demande d'OTP declenche un vrai SMS
-  // (cout) une fois le fournisseur configure. Sans limite, le endpoint
-  // devient un outil de spam ("SMS bombing") contre n'importe quel numero.
-  @Throttle({ default: { limit: 3, ttl: 300_000 } })
+  // 10 demandes / 5 min par IP (large : plusieurs commercants peuvent partager
+  // la meme IP d'operateur). La protection contre le "SMS bombing" d'un numero
+  // donne est assuree par AuthService : un seul code par numero et par minute.
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @Post('otp/request')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.authService.requestOtp(dto.phone);

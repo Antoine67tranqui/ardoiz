@@ -26,6 +26,10 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://ardoiz:ardoiz@db:5432/ardoiz?schema=public
+      # Pile de DEVELOPPEMENT uniquement (mots de passe d'exemple, base exposee) :
+      # l'image est en production par defaut, ce qui exige de vrais secrets.
+      # Un deploiement reel ne doit pas utiliser ce fichier tel quel.
+      NODE_ENV: development
     ports:
       - "3000:3000"
 

@@ -136,6 +136,13 @@ describe('Webhook Mobile Money (e2e)', () => {
       expect(await paymentCount()).toBe(0);
     });
 
+    it('400 pour un montant hors bornes avec signature valide (pas de 500 en base)', async () => {
+      const raw = bodyFor('TX-HUGE', 1e12);
+      const res = await postWebhook(raw, signBody(raw));
+      expect(res.status).toBe(400);
+      expect(await paymentCount()).toBe(0);
+    });
+
     it('400 pour un corps invalide (debtId non UUID, montant negatif)', async () => {
       const raw = JSON.stringify({ debtId: 'pas-un-uuid', amount: -5, transactionRef: 'X' });
       const res = await postWebhook(raw, signBody(raw));

@@ -4,15 +4,21 @@ import { ConfigService } from '@nestjs/config';
 export type ReminderChannel = 'SMS' | 'WHATSAPP';
 
 /**
- * Couche d'abstraction sur les fournisseurs SMS (Africa's Talking / Twilio)
- * et WhatsApp Business API. En l'absence de cles API (environnement de dev),
- * les envois sont simules et logges pour ne jamais bloquer le flux applicatif.
+ * Couche d'abstraction sur les fournisseurs SMS (Africa's Talking) et WhatsApp
+ * Business API. En l'absence de cles API, hors production, les envois sont
+ * simules et logges pour rester testables de bout en bout. En production, un
+ * fournisseur absent est une ERREUR : simuler y marquerait des relances comme
+ * envoyees alors que rien n'est parti, et ecrirait les codes OTP dans les logs.
  */
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
   constructor(private readonly config: ConfigService) {}
+
+  private get isProduction(): boolean {
+    return this.config.get<string>('NODE_ENV') === 'production';
+  }
 
   async sendOtp(phone: string, code: string): Promise<void> {
     await this.sendSms(phone, `Ardoiz: votre code de verification est ${code}. Valable 5 minutes.`);
@@ -60,6 +66,9 @@ export class NotificationsService {
     const apiKey = this.config.get<string>('SMS_API_KEY');
     const username = this.config.get<string>('SMS_USERNAME');
     if (!apiKey || !username) {
+      if (this.isProduction) {
+        throw new Error('Fournisseur SMS non configure (SMS_API_KEY / SMS_USERNAME)');
+      }
       this.logger.warn(`[SMS SIMULE] -> ${phone}: ${message}`);
       return;
     }
@@ -105,10 +114,15 @@ export class NotificationsService {
   private async sendWhatsApp(phone: string, message: string): Promise<void> {
     const token = this.config.get<string>('WHATSAPP_API_TOKEN');
     if (!token) {
+      if (this.isProduction) {
+        throw new Error('Fournisseur WhatsApp non configure (WHATSAPP_API_TOKEN)');
+      }
       this.logger.warn(`[WHATSAPP SIMULE] -> ${phone}: ${message}`);
       return;
     }
-    // Integration reelle WhatsApp Business Cloud API a brancher ici.
-    this.logger.log(`[WHATSAPP] -> ${phone}: ${message}`);
+    // L'integration reelle (WhatsApp Business Cloud API) n'est pas implementee :
+    // ne jamais faire croire qu'un message est parti. La relance sera marquee
+    // FAILED et le commercant pourra l'envoyer par SMS.
+    throw new Error('Envoi WhatsApp reel non implemente');
   }
 }

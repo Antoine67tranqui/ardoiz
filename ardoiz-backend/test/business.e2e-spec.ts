@@ -157,6 +157,33 @@ describe('Logique metier (e2e)', () => {
       expect((await call('post', '/payments', a, { debtId: debt.id, amount: 10, method: 'BITCOIN' })).status).toBe(400);
     });
 
+    it('refuse les montants hors bornes ou a trop de decimales (400, pas de 500 en base)', async () => {
+      const customer = await newCustomer(a);
+      const debt = await newDebt(a, customer.id, 1000);
+
+      for (const amount of [10_000_000_000, 1e12, 100.123]) {
+        expect((await call('post', '/debts', a, { customerId: customer.id, amount })).status).toBe(400);
+        expect((await call('post', '/payments', a, { debtId: debt.id, amount, method: 'CASH' })).status).toBe(400);
+      }
+      expect((await call('post', '/customers', a, { name: 'Plafond', phone: '+229 01 67 07 70 27', creditLimit: 1e13 })).status).toBe(400);
+
+      // Les bornes elles-memes sont acceptees (Decimal(12,2) : 9 999 999 999,99 au plus).
+      expect((await call('post', '/debts', a, { customerId: customer.id, amount: 9_999_999_999 })).status).toBe(201);
+      expect((await call('post', '/debts', a, { customerId: customer.id, amount: 1250.5 })).status).toBe(201);
+    });
+
+    it('borne et normalise les textes saisis (nom, motif, categorie)', async () => {
+      const long = (n: number) => 'x'.repeat(n);
+      expect((await call('post', '/customers', a, { name: long(101), phone: '+229 01 67 07 70 27' })).status).toBe(400);
+      const trimmed = await call('post', '/customers', a, { name: '  Aicha Traore  ', phone: '+229 01 67 07 70 27' });
+      expect(trimmed.body.name).toBe('Aicha Traore');
+
+      const customerId = trimmed.body.id;
+      expect((await call('post', '/debts', a, { customerId, amount: 100, reason: long(501) })).status).toBe(400);
+      expect((await call('post', '/debts', a, { customerId, amount: 100, category: long(51) })).status).toBe(400);
+      expect((await call('get', `/customers?search=${long(101)}`, a)).status).toBe(400);
+    });
+
     it('filtre par statut et refuse un statut inconnu avec une 400 (pas une 500)', async () => {
       const customer = await newCustomer(a);
       const paid = await newDebt(a, customer.id, 1000);

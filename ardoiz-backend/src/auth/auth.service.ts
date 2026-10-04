@@ -1,21 +1,35 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const OTP_TTL_MINUTES = 5;
+// Delai minimal entre deux envois de code pour un meme numero : empeche de
+// "bombarder" de SMS le telephone d'une victime depuis plusieurs adresses IP
+// (la limite par IP seule ne le prevoit pas).
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
+// Un code a 6 chiffres = 1 000 000 de combinaisons : on l'invalide apres
+// quelques essais errones, par compte et non par IP (un attaquant disposant de
+// nombreuses IP contournerait sinon la limite de debit).
+const MAX_OTP_ATTEMPTS = 5;
 const PIN_SALT_ROUNDS = 10;
 // Un PIN a 4 chiffres n'offre que 10 000 combinaisons : sans verrouillage,
 // un attaquant ayant vole/trouve le telephone peut le brute-forcer en
 // quelques minutes. On verrouille temporairement le compte au-dela du seuil.
 const MAX_PIN_ATTEMPTS = 5;
 const PIN_LOCKOUT_MINUTES = 15;
+const UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
 export interface TokenPair {
   accessToken: string;
@@ -25,6 +39,9 @@ export interface TokenPair {
 interface OtpSessionPayload {
   phone: string;
   purpose: 'otp-verified';
+  // Version de jeton du compte au moment de la verification : setupPin() la
+  // consomme (incrementation), ce qui rend la session OTP a usage unique.
+  tokenVersion?: number;
 }
 
 @Injectable()
@@ -37,28 +54,98 @@ export class AuthService {
   ) {}
 
   private generateOtpCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    // crypto.randomInt et non Math.random() : ce dernier est previsible et ne
+    // doit jamais servir a generer un secret d'authentification.
+    return crypto.randomInt(100000, 1000000).toString();
+  }
+
+  // Empreinte HMAC liee au numero : la base ne contient jamais le code en
+  // clair, et une empreinte copiee d'un autre compte ne valide rien.
+  private hashOtp(phone: string, code: string): string {
+    return crypto
+      .createHmac('sha256', this.getOtpSessionSecret() ?? '')
+      .update(`${phone}:${code}`)
+      .digest('hex');
+  }
+
+  private otpMatches(phone: string, code: string, storedHash: string): boolean {
+    const expected = Buffer.from(this.hashOtp(phone, code));
+    const actual = Buffer.from(storedHash);
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  }
+
+  private tooManyOtpRequests(): HttpException {
+    return new HttpException(
+      `Un code vient d'etre envoye. Patientez ${OTP_RESEND_COOLDOWN_SECONDS} secondes avant d'en redemander un.`,
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   async requestOtp(phone: string): Promise<{ message: string; devCode?: string }> {
     const code = this.generateOtpCode();
-    const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+    const now = Date.now();
+    const expiresAt = new Date(now + OTP_TTL_MINUTES * 60 * 1000);
+    const otpHash = this.hashOtp(phone, code);
 
-    await this.prisma.user.upsert({
-      where: { phone },
-      update: { otpCode: code, otpExpiresAt: expiresAt },
-      create: {
+    // Mise a jour atomique, acceptee seulement si le dernier code a plus de
+    // OTP_RESEND_COOLDOWN_SECONDS (ou a expire) : deux requetes concurrentes
+    // ne peuvent pas contourner le delai.
+    const cooldownThreshold = new Date(
+      now + (OTP_TTL_MINUTES * 60 - OTP_RESEND_COOLDOWN_SECONDS) * 1000,
+    );
+    const updated = await this.prisma.user.updateMany({
+      where: {
         phone,
-        otpCode: code,
-        otpExpiresAt: expiresAt,
-        // Compte cree en etat "incomplet" : pinHash/businessName sont
-        // finalises lors de l'etape setup-pin pour un nouvel utilisateur.
-        pinHash: '',
-        businessName: '',
+        OR: [{ otpExpiresAt: null }, { otpExpiresAt: { lt: cooldownThreshold } }],
       },
+      data: { otpCode: otpHash, otpExpiresAt: expiresAt, otpFailedAttempts: 0 },
     });
 
-    await this.notifications.sendOtp(phone, code);
+    if (updated.count === 0) {
+      const existing = await this.prisma.user.findUnique({
+        where: { phone },
+        select: { id: true },
+      });
+      if (existing) {
+        throw this.tooManyOtpRequests();
+      }
+      try {
+        await this.prisma.user.create({
+          data: {
+            phone,
+            otpCode: otpHash,
+            otpExpiresAt: expiresAt,
+            // Compte cree en etat "incomplet" : pinHash/businessName sont
+            // finalises lors de l'etape setup-pin pour un nouvel utilisateur.
+            pinHash: '',
+            businessName: '',
+          },
+        });
+      } catch (error) {
+        // Deux premieres demandes simultanees pour le meme numero.
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === UNIQUE_CONSTRAINT_VIOLATION
+        ) {
+          throw this.tooManyOtpRequests();
+        }
+        throw error;
+      }
+    }
+
+    try {
+      await this.notifications.sendOtp(phone, code);
+    } catch {
+      // Le code n'a pas pu partir : l'invalider pour que l'utilisateur puisse
+      // reessayer tout de suite, sans attendre le delai anti-spam.
+      await this.prisma.user.updateMany({
+        where: { phone, otpCode: otpHash },
+        data: { otpCode: null, otpExpiresAt: null },
+      });
+      throw new ServiceUnavailableException(
+        "L'envoi du SMS a echoue. Veuillez reessayer dans un instant.",
+      );
+    }
 
     // Aucun fournisseur SMS reel n'est configure (SMS_API_KEY absent) :
     // le code est simule et loggue cote serveur uniquement. On le renvoie
@@ -94,17 +181,42 @@ export class AuthService {
     if (user.otpExpiresAt < new Date()) {
       throw new BadRequestException('Code OTP expire, veuillez en redemander un');
     }
-    if (user.otpCode !== code) {
+    if (!this.otpMatches(phone, code, user.otpCode)) {
+      // Incrementation atomique : des essais concurrents ne peuvent pas
+      // sous-compter les echecs.
+      const { otpFailedAttempts } = await this.prisma.user.update({
+        where: { phone },
+        data: { otpFailedAttempts: { increment: 1 } },
+        select: { otpFailedAttempts: true },
+      });
+      if (otpFailedAttempts >= MAX_OTP_ATTEMPTS) {
+        await this.prisma.user.update({
+          where: { phone },
+          data: { otpCode: null, otpExpiresAt: null, otpFailedAttempts: 0 },
+        });
+        throw new BadRequestException(
+          'Trop d\'essais errones : ce code est invalide, veuillez en redemander un',
+        );
+      }
       throw new BadRequestException('Code OTP invalide');
     }
 
-    await this.prisma.user.update({
-      where: { phone },
-      data: { otpCode: null, otpExpiresAt: null },
+    // Consommation atomique : un code ne peut valider qu'une seule fois, meme
+    // si deux requetes l'envoient en meme temps.
+    const consumed = await this.prisma.user.updateMany({
+      where: { phone, otpCode: user.otpCode },
+      data: { otpCode: null, otpExpiresAt: null, otpFailedAttempts: 0 },
     });
+    if (consumed.count === 0) {
+      throw new BadRequestException('Aucun code OTP en attente pour ce numero');
+    }
 
     const otpSessionToken = this.jwt.sign(
-      { phone, purpose: 'otp-verified' } satisfies OtpSessionPayload,
+      {
+        phone,
+        purpose: 'otp-verified',
+        tokenVersion: user.tokenVersion,
+      } satisfies OtpSessionPayload,
       {
         secret: this.getOtpSessionSecret(),
         expiresIn: '10m',
@@ -114,6 +226,12 @@ export class AuthService {
     return { otpSessionToken, isNewUser: user.pinHash === '' };
   }
 
+  /**
+   * Cree le PIN d'un nouveau compte, ou le reinitialise apres un OTP valide
+   * (PIN oublie). La session OTP est a usage unique, la reinitialisation
+   * deverrouille le compte et revoque toutes les sessions deja ouvertes
+   * (un telephone perdu ne doit pas rester connecte apres un nouveau PIN).
+   */
   async setupPin(
     otpSessionToken: string,
     businessName: string,
@@ -122,11 +240,23 @@ export class AuthService {
     const payload = this.decodeOtpSession(otpSessionToken);
 
     const pinHash = await bcrypt.hash(pin, PIN_SALT_ROUNDS);
-    const user = await this.prisma.user.update({
-      where: { phone: payload.phone },
-      data: { businessName, pinHash },
+    const consumed = await this.prisma.user.updateMany({
+      where: { phone: payload.phone, tokenVersion: payload.tokenVersion },
+      data: {
+        businessName,
+        pinHash,
+        pinFailedAttempts: 0,
+        pinLockedUntil: null,
+        tokenVersion: { increment: 1 },
+      },
     });
+    if (consumed.count === 0) {
+      throw new UnauthorizedException('Session OTP invalide ou expiree');
+    }
 
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { phone: payload.phone },
+    });
     return this.issueTokens(user.id, user.phone, user.tokenVersion);
   }
 
@@ -192,10 +322,10 @@ export class AuthService {
         pinHash,
         pinFailedAttempts: 0,
         pinLockedUntil: null,
-        // Un changement de PIN doit invalider tout refresh token deja emis
-        // (ex: vol de telephone suivi d'un changement de PIN par le
-        // proprietaire legitime) : incrementer tokenVersion les fait tous
-        // echouer au prochain refresh(), sans avoir a les lister/stocker.
+        // Un changement de PIN doit invalider tout jeton deja emis (ex: vol
+        // de telephone suivi d'un changement de PIN par le proprietaire
+        // legitime) : incrementer tokenVersion les fait tous echouer, sans
+        // avoir a les lister/stocker.
         tokenVersion: { increment: 1 },
       },
     });
@@ -203,7 +333,7 @@ export class AuthService {
     return { message: 'PIN mis a jour' };
   }
 
-  /** Revoque tous les refresh tokens en circulation pour cet utilisateur (deconnexion explicite). */
+  /** Revoque tous les jetons (acces et refresh) en circulation pour cet utilisateur. */
   async logout(userId: string): Promise<{ message: string }> {
     await this.prisma.user.update({
       where: { id: userId },
@@ -227,7 +357,7 @@ export class AuthService {
       // l'ancienne valeur de tokenVersion : il doit etre rejete meme si sa
       // signature et son expiration sont valides.
       if (user.tokenVersion !== payload.tokenVersion) {
-        throw new UnauthorizedException('Jeton de rafraichissement revoque');
+        throw new Error('refresh token revoque');
       }
 
       return this.issueTokens(user.id, user.phone, user.tokenVersion);
@@ -256,8 +386,8 @@ export class AuthService {
   // la confusion de jetons, mais reutiliser un meme secret pour deux types de
   // jetons distincts reste un risque si un futur chemin de code verifie un
   // jeton sans en controler le `purpose`. Se replie sur JWT_ACCESS_SECRET si
-  // JWT_OTP_SECRET n'est pas defini, pour rester compatible avec un .env
-  // existant non mis a jour.
+  // JWT_OTP_SECRET n'est pas defini hors production (la validation de la
+  // configuration l'exige en production, voir config/env.validation.ts).
   private getOtpSessionSecret(): string | undefined {
     return (
       this.config.get<string>('JWT_OTP_SECRET') ??
@@ -270,8 +400,11 @@ export class AuthService {
     phone: string,
     tokenVersion: number,
   ): TokenPair {
+    // tokenVersion dans les deux jetons : un logout ou un changement de PIN
+    // invalide immediatement les jetons d'acces (verifie par JwtStrategy), pas
+    // seulement les refresh tokens a leur prochain renouvellement.
     const accessToken = this.jwt.sign(
-      { sub: userId, phone },
+      { sub: userId, phone, tokenVersion },
       {
         secret: this.config.get<string>('JWT_ACCESS_SECRET'),
         expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m',

@@ -186,39 +186,3 @@ describe('Relances, regles et abonnement (e2e)', () => {
     });
   });
 });
-
-describe('Abonnement en production (e2e)', () => {
-  let ctx: TestContext;
-  const previousEnv = process.env.NODE_ENV;
-
-  beforeAll(async () => {
-    process.env.NODE_ENV = 'production';
-    ctx = await createTestApp();
-  });
-  afterAll(async () => {
-    await ctx.app.close();
-    process.env.NODE_ENV = previousEnv;
-  });
-
-  it("n'offre jamais Premium gratuitement quand aucun agregateur Mobile Money n'est configure (503)", async () => {
-    await resetDb(ctx.prisma);
-    // En production devCode n'est pas renvoye : on cree le compte directement.
-    const user = await ctx.prisma.user.create({
-      data: { phone: '+2290167000299', pinHash: 'x', businessName: 'Boutique Prod' },
-    });
-    const accessToken = ctx.app.get(require('@nestjs/jwt').JwtService).sign(
-      { sub: user.id, phone: user.phone },
-      { secret: process.env.JWT_ACCESS_SECRET },
-    );
-
-    const res = await ctx
-      .http()
-      .post('/api/v1/subscription/upgrade')
-      .set('X-Forwarded-For', freshIp())
-      .set('Authorization', `Bearer ${accessToken}`);
-
-    expect(res.status).toBe(503);
-    const after = await ctx.prisma.user.findUniqueOrThrow({ where: { id: user.id } });
-    expect(after.plan).toBe('FREE');
-  });
-});

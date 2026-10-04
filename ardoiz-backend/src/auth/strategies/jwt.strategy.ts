@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 export interface JwtPayload {
   sub: string;
   phone: string;
+  tokenVersion?: number;
 }
 
 export interface AuthenticatedUser {
@@ -34,6 +35,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
     if (!user) {
       throw new UnauthorizedException('Utilisateur introuvable');
+    }
+    // Deconnexion / changement de PIN / reinitialisation : tout jeton d'acces
+    // emis avant est rejete immediatement, sans attendre son expiration.
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedException('Session revoquee, veuillez vous reconnecter');
     }
     return { id: user.id, phone: user.phone, businessName: user.businessName };
   }

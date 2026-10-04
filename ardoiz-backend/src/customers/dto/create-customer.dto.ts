@@ -1,10 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { MAX_AMOUNT_FCFA } from '../../common/constants';
 
 export class CreateCustomerDto {
   @ApiProperty({ example: 'Aicha Traore' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name!: string;
 
   // Obligatoire : necessaire pour les relances SMS/WhatsApp et les
@@ -24,7 +28,8 @@ export class CreateCustomerDto {
       "Plafond de credit optionnel (FCFA) : au-dela, l'app alerte le commercant sans bloquer la saisie",
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT_FCFA)
   creditLimit?: number;
 }

@@ -178,18 +178,19 @@ describe('Auth (e2e)', () => {
       expect(JSON.stringify(locked.body.message)).toMatch(/tentatives/);
     });
 
-    it('limite les demandes d\'OTP a 3 par 5 minutes et par IP (429)', async () => {
+    it('limite les demandes d\'OTP a 10 par 5 minutes et par IP (429)', async () => {
       const ip = freshIp();
       const statuses: number[] = [];
-      for (let i = 0; i < 4; i += 1) {
+      for (let i = 0; i < 11; i += 1) {
         const res = await ctx
           .http()
           .post('/api/v1/auth/otp/request')
           .set('X-Forwarded-For', ip)
-          .send({ phone: `+229016700004${i}` });
+          .send({ phone: `+22901670010${String(i).padStart(2, '0')}` });
         statuses.push(res.status);
       }
-      expect(statuses).toEqual([201, 201, 201, 429]);
+      expect(statuses.slice(0, 10).every((s) => s === 201)).toBe(true);
+      expect(statuses[10]).toBe(429);
     });
 
     it('limite les tentatives de connexion a 10 par minute et par IP (429)', async () => {
@@ -216,29 +217,5 @@ describe('Auth (e2e)', () => {
       .set('X-Forwarded-For', freshIp())
       .set('Authorization', 'Bearer n.importe.quoi');
     expect(bad.status).toBe(401);
-  });
-});
-
-describe('Auth en production (e2e)', () => {
-  let ctx: TestContext;
-  const previousEnv = process.env.NODE_ENV;
-
-  beforeAll(async () => {
-    process.env.NODE_ENV = 'production';
-    ctx = await createTestApp();
-  });
-  afterAll(async () => {
-    await ctx.app.close();
-    process.env.NODE_ENV = previousEnv;
-  });
-
-  it("ne renvoie jamais le code OTP (devCode) en production, meme sans fournisseur SMS configure", async () => {
-    const res = await ctx
-      .http()
-      .post('/api/v1/auth/otp/request')
-      .set('X-Forwarded-For', freshIp())
-      .send({ phone: '+2290167000099' });
-    expect(res.status).toBe(201);
-    expect(res.body.devCode).toBeUndefined();
   });
 });

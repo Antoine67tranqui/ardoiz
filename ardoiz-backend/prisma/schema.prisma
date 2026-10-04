@@ -48,8 +48,11 @@ model User {
   phone        String     @unique
   pinHash      String
   businessName String
+  // Empreinte HMAC du code OTP (jamais le code en clair) et nombre d'essais
+  // errones : au-dela du seuil (AuthService.MAX_OTP_ATTEMPTS) le code est invalide.
   otpCode      String?
   otpExpiresAt DateTime?
+  otpFailedAttempts Int   @default(0)
   // Protection anti-bruteforce du PIN (4 chiffres = 10 000 combinaisons) :
   // compteur remis a zero a chaque connexion reussie, verrouillage temporaire
   // au-dela du seuil (voir AuthService.MAX_PIN_ATTEMPTS).

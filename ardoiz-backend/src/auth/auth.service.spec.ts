@@ -33,7 +33,7 @@ describe('AuthService.login (verrouillage PIN)', () => {
     const jwt = { sign: jest.fn().mockReturnValue('token') };
     const config = { get: jest.fn().mockReturnValue('secret') };
     const notifications = {};
-    const service = new AuthService(prisma as any, jwt as any, config as any, notifications as any);
+    const service = new AuthService(prisma as any, jwt as any, config as any, notifications as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
     return { service, prisma };
   };
 
@@ -90,7 +90,7 @@ describe('AuthService.refresh (revocation via tokenVersion)', () => {
       sign: jest.fn().mockReturnValue('new-token'),
     };
     const config = { get: jest.fn().mockReturnValue('secret') };
-    return new AuthService(prisma as any, jwt as any, config as any, {} as any);
+    return new AuthService(prisma as any, jwt as any, config as any, {} as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
   };
 
   it('emet de nouveaux jetons quand tokenVersion correspond', async () => {
@@ -118,7 +118,7 @@ describe('AuthService.logout / changePin (revocation)', () => {
   it('logout incremente tokenVersion', async () => {
     const update = jest.fn().mockResolvedValue({});
     const prisma = { user: { update } };
-    const service = new AuthService(prisma as any, {} as any, {} as any, {} as any);
+    const service = new AuthService(prisma as any, {} as any, {} as any, {} as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
 
     await service.logout('user-1');
 

@@ -55,6 +55,9 @@ export class PaymentsController {
     @Body() dto: RequestMomoPaymentDto,
   ) {
     const debt = await this.debtsService.getOwnedDebt(user.id, dto.debtId);
+    if (debt.customer.kind === 'SUPPLIER') {
+      throw new BadRequestException("Une demande de paiement ne s'envoie qu'a un client, pas a un fournisseur");
+    }
     if (!debt.customer.phone) {
       throw new BadRequestException("Ce client n'a pas de numero de telephone enregistre");
     }

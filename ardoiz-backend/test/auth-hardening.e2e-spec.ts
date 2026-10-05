@@ -1,3 +1,4 @@
+import { CURRENT_TERMS_VERSION } from '../src/common/legal';
 import * as crypto from 'crypto';
 import { NotificationsService } from '../src/notifications/notifications.service';
 import { bearer, createTestApp, freshIp, resetDb, signUp, TestContext } from './helpers';
@@ -26,7 +27,7 @@ describe('Durcissement de l\'authentification (e2e)', () => {
   const verifyOtp = (phone: string, code: string, ip = freshIp()) =>
     ctx.http().post('/api/v1/auth/otp/verify').set('X-Forwarded-For', ip).send({ phone, code });
   const setupPin = (otpSessionToken: string, pin = '1234', businessName = 'Boutique') =>
-    ctx.http().post('/api/v1/auth/pin/setup').set('X-Forwarded-For', freshIp()).send({ otpSessionToken, businessName, pin });
+    ctx.http().post('/api/v1/auth/pin/setup').set('X-Forwarded-For', freshIp()).send({ otpSessionToken, businessName, pin, termsVersion: CURRENT_TERMS_VERSION });
   const login = (phone: string, pin: string) =>
     ctx.http().post('/api/v1/auth/login').set('X-Forwarded-For', freshIp()).send({ phone, pin });
 

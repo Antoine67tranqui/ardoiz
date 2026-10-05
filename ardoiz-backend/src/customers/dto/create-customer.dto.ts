@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { PartyKind } from '@prisma/client';
 import { MAX_AMOUNT_FCFA } from '../../common/constants';
 
 export class CreateCustomerDto {
@@ -40,4 +41,20 @@ export class CreateCustomerDto {
   @Min(0)
   @Max(MAX_AMOUNT_FCFA)
   creditLimit?: number;
+
+  @ApiPropertyOptional({
+    enum: PartyKind,
+    default: 'CLIENT',
+    description: "CLIENT : il me doit de l'argent. SUPPLIER : je lui dois de l'argent. Ne se modifie pas apres la creation.",
+  })
+  @IsOptional()
+  @IsEnum(PartyKind)
+  kind?: PartyKind;
+
+  @ApiPropertyOptional({
+    description: "Vrai si la personne s'oppose a recevoir des relances : plus aucune relance ne lui est envoyee",
+  })
+  @IsOptional()
+  @IsBoolean()
+  reminderOptOut?: boolean;
 }

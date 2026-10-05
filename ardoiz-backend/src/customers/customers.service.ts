@@ -34,11 +34,14 @@ export class CustomersService {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
 
     if (!isPremiumActive(user)) {
-      const customerCount = await this.prisma.customer.count({ where: { userId } });
+      // Limite par type : 15 clients ET 15 fournisseurs au plan gratuit.
+      const kind = dto.kind ?? 'CLIENT';
+      const customerCount = await this.prisma.customer.count({ where: { userId, kind } });
       if (customerCount >= FREE_PLAN_CUSTOMER_LIMIT) {
+        const noun = kind === 'SUPPLIER' ? 'fournisseurs' : 'clients';
         throw new ForbiddenException({
           code: 'FREE_PLAN_LIMIT_REACHED',
-          message: `Le plan gratuit est limite a ${FREE_PLAN_CUSTOMER_LIMIT} clients. Passez a Premium pour en ajouter davantage.`,
+          message: `Le plan gratuit est limite a ${FREE_PLAN_CUSTOMER_LIMIT} ${noun}. Passez a Premium pour en ajouter davantage.`,
         });
       }
     }
@@ -70,12 +73,13 @@ export class CustomersService {
   }
 
   async findAllForUser(userId: string, query: QueryCustomersDto = {}) {
-    const { search, sortBy = 'createdAt', order = 'desc', overdueOnly } = query;
+    const { search, sortBy = 'createdAt', order = 'desc', overdueOnly, kind } = query;
     const now = new Date();
 
     const customers = await this.prisma.customer.findMany({
       where: {
         userId,
+        ...(kind ? { kind } : {}),
         ...(search
           ? {
               OR: [

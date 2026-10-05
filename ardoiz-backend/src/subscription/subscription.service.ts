@@ -17,13 +17,17 @@ export class SubscriptionService {
 
   async getStatus(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const customerCount = await this.prisma.customer.count({ where: { userId } });
+    const [customerCount, supplierCount] = await Promise.all([
+      this.prisma.customer.count({ where: { userId, kind: 'CLIENT' } }),
+      this.prisma.customer.count({ where: { userId, kind: 'SUPPLIER' } }),
+    ]);
     const isPremium = isPremiumActive(user);
 
     return {
       plan: isPremium ? 'PREMIUM' : 'FREE',
       planExpiresAt: user.planExpiresAt,
       customerCount,
+      supplierCount,
       customerLimit: isPremium ? null : FREE_PLAN_CUSTOMER_LIMIT,
       monthlyPriceFcfa: PREMIUM_MONTHLY_PRICE_FCFA,
       paymentsAvailable: this.mobileMoneyService.isOperational(),

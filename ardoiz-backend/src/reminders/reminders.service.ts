@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ReminderChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -22,6 +22,15 @@ export class RemindersService {
     channel: ReminderChannel = 'SMS',
   ) {
     const debt = await this.debtsService.getOwnedDebt(userId, debtId);
+    if (debt.customer.kind === 'SUPPLIER') {
+      throw new BadRequestException("On ne relance pas un fournisseur : c'est vous qui lui devez de l'argent");
+    }
+    if (debt.customer.reminderOptOut) {
+      throw new ConflictException({
+        code: 'REMINDER_OPT_OUT',
+        message: "Ce client s'oppose a recevoir des relances. Retirez son opposition dans sa fiche si c'est a sa demande.",
+      });
+    }
     // Relancer une dette soldee enverrait un message de reclamation a tort.
     if (outstandingOf(debt.amount, debt.payments).lessThanOrEqualTo(0)) {
       throw new BadRequestException('Cette dette est deja soldee');
@@ -61,7 +70,7 @@ export class RemindersService {
         where: {
           status: { in: ['PENDING', 'PARTIAL'] },
           dueDate: { gte: targetStart, lt: targetEnd },
-          customer: { userId: rule.userId },
+          customer: { userId: rule.userId, kind: 'CLIENT', reminderOptOut: false },
           // Pas de relance deja envoyee pour cette meme etape sur cette dette.
           reminders: { none: { stageOffsetDays: rule.offsetDays } },
         },

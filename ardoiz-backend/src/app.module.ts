@@ -17,6 +17,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { ExportModule } from './export/export.module';
 import { SyncModule } from './sync/sync.module';
+import { CashModule } from './cash/cash.module';
+import { AuditModule } from './audit/audit.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
@@ -31,6 +33,7 @@ import { HealthController } from './health/health.controller';
     // explicitement sur les routes sensibles (OTP, login, webhook).
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     PrismaModule,
+    AuditModule,
     AuthModule,
     CustomersModule,
     DebtsModule,
@@ -41,6 +44,7 @@ import { HealthController } from './health/health.controller';
     SubscriptionModule,
     ExportModule,
     SyncModule,
+    CashModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],

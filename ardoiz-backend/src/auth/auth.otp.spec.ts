@@ -8,7 +8,7 @@ describe('AuthService.requestOtp (generation du code)', () => {
     const prisma = { user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) } };
     const notifications = { sendOtp: jest.fn().mockResolvedValue(undefined) };
     const config = { get: jest.fn((key: string) => (key === 'JWT_OTP_SECRET' ? 'secret-de-test' : undefined)) };
-    return { service: new AuthService(prisma as any, {} as any, config as any, notifications as any), prisma, notifications };
+    return { service: new AuthService(prisma as any, {} as any, config as any, notifications as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any), prisma, notifications };
   };
 
   it('utilise un generateur cryptographique (crypto.randomInt), jamais Math.random()', async () => {

@@ -52,12 +52,18 @@ export class DashboardService {
       });
     }
 
-    const [debts, totalCustomers] = await Promise.all([
+    // Les indicateurs ci-dessous portent sur les CLIENTS (ce qu'on me doit) ;
+    // ce que je dois aux fournisseurs est totalise a part (payables).
+    const [debts, supplierDebts, totalCustomers] = await Promise.all([
       this.prisma.debt.findMany({
-        where: { customer: { userId } },
+        where: { customer: { userId, kind: 'CLIENT' } },
         include: { customer: true, payments: true },
       }),
-      this.prisma.customer.count({ where: { userId } }),
+      this.prisma.debt.findMany({
+        where: { customer: { userId, kind: 'SUPPLIER' } },
+        include: { payments: true },
+      }),
+      this.prisma.customer.count({ where: { userId, kind: 'CLIENT' } }),
     ]);
 
     const now = new Date();
@@ -155,7 +161,24 @@ export class DashboardService {
         }
       : null;
 
+    // Ce que je dois aux fournisseurs : reste a payer et part deja echue.
+    let payableDec = new Prisma.Decimal(0);
+    let payableOverdueDec = new Prisma.Decimal(0);
+    const suppliersWithDebt = new Set<string>();
+    for (const debt of supplierDebts) {
+      const outstandingDec = outstandingOf(debt.amount, debt.payments);
+      if (outstandingDec.lessThanOrEqualTo(0)) continue;
+      payableDec = payableDec.plus(outstandingDec);
+      suppliersWithDebt.add(debt.customerId);
+      if (debt.dueDate && debt.dueDate.getTime() < now.getTime()) {
+        payableOverdueDec = payableOverdueDec.plus(outstandingDec);
+      }
+    }
+
     return {
+      totalPayable: payableDec.toNumber(),
+      payableOverdue: payableOverdueDec.toNumber(),
+      suppliersWithDebt: suppliersWithDebt.size,
       totalOutstanding: totalOutstandingDec.toNumber(),
       totalCustomers,
       customersWithDebt: customersWithDebt.size,

@@ -15,7 +15,8 @@
     "test:e2e": "jest --config test/jest-e2e.config.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "admin": "node dist/admin/cli.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.4",

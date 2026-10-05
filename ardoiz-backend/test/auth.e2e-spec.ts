@@ -1,3 +1,4 @@
+import { CURRENT_TERMS_VERSION } from '../src/common/legal';
 import { createTestApp, freshIp, resetDb, signUp, bearer, TestContext } from './helpers';
 
 describe('Auth (e2e)', () => {
@@ -76,7 +77,7 @@ describe('Auth (e2e)', () => {
       .http()
       .post('/api/v1/auth/pin/setup')
       .set('X-Forwarded-For', freshIp())
-      .send({ otpSessionToken: session.accessToken, businessName: 'Pirate', pin: '9999' });
+      .send({ otpSessionToken: session.accessToken, businessName: 'Pirate', pin: '9999', termsVersion: CURRENT_TERMS_VERSION });
     expect(res.status).toBe(401);
   });
 
@@ -259,7 +260,7 @@ describe('Auth (e2e)', () => {
       const session = await signUp(ctx, '+2290167000060', 'Boutique Fatou');
       const get = () => ctx.http().get('/api/v1/auth/me').set('X-Forwarded-For', freshIp()).set(bearer(session));
 
-      expect((await get()).body).toEqual({
+      expect((await get()).body).toMatchObject({
         id: session.userId,
         phone: session.phone,
         businessName: 'Boutique Fatou',

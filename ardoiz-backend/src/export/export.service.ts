@@ -5,7 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 
 /** Echappe une valeur pour un champ CSV (RFC 4180). */
 function csvField(value: unknown): string {
-  const str = value === null || value === undefined ? '' : String(value);
+  let str = value === null || value === undefined ? '' : String(value);
+  // Injection de formule (OWASP « CSV injection ») : un nom de client comme
+  // « =HYPERLINK(...) » serait EXECUTE par Excel a l'ouverture. Une apostrophe
+  // en tete force le tableur a lire le texte tel quel.
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(str)) str = `'${str}`;
   if (/[",\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -41,8 +45,9 @@ export class ExportService {
     });
 
     const headers = [
-      'Client',
-      'Telephone client',
+      'Type',
+      'Nom',
+      'Telephone',
       'Categorie',
       'Motif',
       'Montant initial (FCFA)',
@@ -64,6 +69,7 @@ export class ExportService {
       )[0];
 
       return [
+        debt.customer.kind === 'SUPPLIER' ? 'Fournisseur' : 'Client',
         debt.customer.name,
         debt.customer.phone,
         debt.category,
@@ -84,5 +90,19 @@ export class ExportService {
     // BOM UTF-8 : garantit que les caracteres accentues s'affichent
     // correctement a l'ouverture dans Excel.
     return '﻿' + lines.join('\r\n');
+  }
+
+  /** Journal de caisse (ventes au comptant et depenses) au format CSV. */
+  async generateCashCsv(userId: string): Promise<string> {
+    const entries = await this.prisma.cashEntry.findMany({ where: { userId }, orderBy: { occurredAt: 'desc' } });
+    const headers = ['Date', 'Nature', 'Montant (FCFA)', 'Categorie', 'Libelle'];
+    const rows = entries.map((e) => [
+      formatDate(e.occurredAt),
+      e.type === 'SALE' ? 'Vente' : 'Depense',
+      new Prisma.Decimal(e.amount).toFixed(2),
+      e.category,
+      e.label ?? '',
+    ]);
+    return '\ufeff' + [headers, ...rows].map((row) => row.map(csvField).join(',')).join('\r\n');
   }
 }

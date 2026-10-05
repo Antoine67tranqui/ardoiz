@@ -268,8 +268,8 @@ describe('Logique metier (e2e)', () => {
 
       expect(res.text.charCodeAt(0)).toBe(0xfeff);
       const lines = res.text.slice(1).split('\r\n');
-      expect(lines[0]).toContain('Client,Telephone client,Categorie,Motif,Montant initial (FCFA)');
-      expect(lines[1]).toContain('"Diallo, ""le Grand"""');
+      expect(lines[0]).toContain('Type,Nom,Telephone,Categorie,Motif,Montant initial (FCFA)');
+      expect(lines[1]).toContain('Client,"Diallo, ""le Grand"""');
       expect(lines[1]).toContain('"Riz, huile"');
       expect(lines[1]).toContain(',5000.00,1500.00,3500.00,Partiellement remboursee,');
       expect(lines[1]).toContain(',CASH,0');

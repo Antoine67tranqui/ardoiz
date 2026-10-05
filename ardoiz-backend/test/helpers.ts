@@ -5,6 +5,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { APP_OPTIONS, configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { CURRENT_TERMS_VERSION } from '../src/common/legal';
 
 export interface TestContext {
   app: INestApplication;
@@ -59,7 +60,7 @@ export async function signUp(
     .http()
     .post('/api/v1/auth/pin/setup')
     .set('X-Forwarded-For', ip)
-    .send({ otpSessionToken: verified.body.otpSessionToken, businessName, pin });
+    .send({ otpSessionToken: verified.body.otpSessionToken, businessName, pin, termsVersion: CURRENT_TERMS_VERSION });
   const user = await ctx.prisma.user.findUniqueOrThrow({ where: { phone } });
   return { userId: user.id, phone, ...tokens.body };
 }

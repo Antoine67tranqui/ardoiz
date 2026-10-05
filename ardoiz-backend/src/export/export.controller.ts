@@ -28,4 +28,13 @@ export class ExportController {
     );
     res.send(csv);
   }
+
+  @Get('cash')
+  async downloadCash(@CurrentUser() user: AuthenticatedUser, @Res() res: Response) {
+    const csv = await this.exportService.generateCashCsv(user.id);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="carne-caisse-${date}.csv"`);
+    res.send(csv);
+  }
 }

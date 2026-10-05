@@ -15,6 +15,9 @@ import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isPremiumActive } from '../subscription/subscription.utils';
+import { AuditService } from '../audit/audit.service';
+import { AccountService } from '../account/account.service';
+import { CURRENT_TERMS_VERSION } from '../common/legal';
 
 const OTP_TTL_MINUTES = 5;
 // Delai minimal entre deux envois de code pour un meme numero : empeche de
@@ -53,6 +56,8 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
+    private readonly account: AccountService,
   ) {}
 
   private generateOtpCode(): string {
@@ -238,8 +243,18 @@ export class AuthService {
     otpSessionToken: string,
     businessName: string,
     pin: string,
+    termsVersion: string,
   ): Promise<TokenPair> {
     const payload = this.decodeOtpSession(otpSessionToken);
+
+    // Consentement explicite et eclaire : verifie AVANT de consommer la session
+    // OTP, pour que l'utilisateur puisse reessayer apres avoir mis l'app a jour.
+    if (termsVersion !== CURRENT_TERMS_VERSION) {
+      throw new BadRequestException({
+        code: 'TERMS_VERSION_MISMATCH',
+        message: "Les conditions d'utilisation ont change : mettez a jour l'application puis acceptez la version en vigueur.",
+      });
+    }
 
     const pinHash = await bcrypt.hash(pin, PIN_SALT_ROUNDS);
     const consumed = await this.prisma.user.updateMany({
@@ -259,6 +274,8 @@ export class AuthService {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { phone: payload.phone },
     });
+    await this.account.acceptTerms(user.id, termsVersion);
+    await this.audit.record(user.id, 'ACCOUNT_CREATED');
     return this.issueTokens(user.id, user.phone, user.tokenVersion);
   }
 
@@ -291,6 +308,7 @@ export class AuthService {
         },
       });
       if (lockedOut) {
+        await this.audit.record(user.id, 'PIN_LOCKED');
         throw new UnauthorizedException(
           `Trop de tentatives echouees. Compte verrouille ${PIN_LOCKOUT_MINUTES} minutes.`,
         );
@@ -305,6 +323,7 @@ export class AuthService {
       });
     }
 
+    await this.audit.record(user.id, 'LOGIN');
     return this.issueTokens(user.id, user.phone, user.tokenVersion);
   }
 
@@ -328,6 +347,7 @@ export class AuthService {
       },
     });
 
+    await this.audit.record(userId, 'PIN_CHANGED');
     return { message: 'PIN mis a jour' };
   }
 
@@ -360,6 +380,7 @@ export class AuthService {
         },
       });
       if (lockedOut) {
+        await this.audit.record(user.id, 'PIN_LOCKED');
         throw new ForbiddenException(`Trop de tentatives echouees. Compte verrouille ${PIN_LOCKOUT_MINUTES} minutes.`);
       }
       throw new BadRequestException('PIN actuel incorrect');
@@ -390,6 +411,7 @@ export class AuthService {
       businessName: user.businessName,
       plan: premium ? 'PREMIUM' : 'FREE',
       planExpiresAt: premium ? user.planExpiresAt : null,
+      ...(await this.account.consentStatus(userId)),
     };
   }
 
@@ -404,6 +426,7 @@ export class AuthService {
       where: { id: userId },
       data: { tokenVersion: { increment: 1 } },
     });
+    await this.audit.record(userId, 'LOGOUT');
     return { message: 'Deconnecte' };
   }
 

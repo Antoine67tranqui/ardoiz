@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -10,6 +11,9 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePinDto } from './dto/change-pin.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { DeleteAccountDto } from './dto/delete-account.dto';
+import { AcceptTermsDto } from './dto/accept-terms.dto';
+import { AccountService } from '../account/account.service';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
@@ -17,7 +21,11 @@ import { AuthenticatedUser } from './strategies/jwt.strategy';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly account: AccountService,
+    private readonly audit: AuditService,
+  ) {}
 
   // 10 demandes / 5 min par IP (large : plusieurs commercants peuvent partager
   // la meme IP d'operateur). La protection contre le "SMS bombing" d'un numero
@@ -39,7 +47,7 @@ export class AuthController {
 
   @Post('pin/setup')
   setupPin(@Body() dto: SetupPinDto) {
-    return this.authService.setupPin(dto.otpSessionToken, dto.businessName, dto.pin);
+    return this.authService.setupPin(dto.otpSessionToken, dto.businessName, dto.pin, dto.termsVersion);
   }
 
   // Le verrouillage de compte (auth.service.ts) protege deja le PIN apres 5
@@ -84,6 +92,46 @@ export class AuthController {
   @Post('account/delete')
   deleteAccount(@CurrentUser() user: AuthenticatedUser, @Body() dto: DeleteAccountDto) {
     return this.authService.deleteAccount(user.id, dto.pin);
+  }
+
+  /** Acceptation d'une nouvelle version des conditions (re-consentement). */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('consent')
+  acceptTerms(@CurrentUser() user: AuthenticatedUser, @Body() dto: AcceptTermsDto) {
+    return this.account.acceptTerms(user.id, dto.termsVersion);
+  }
+
+  /** Journal d'activite du compte (100 derniers evenements, 12 mois au plus). */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('activity')
+  activity(@CurrentUser() user: AuthenticatedUser) {
+    return this.audit.recent(user.id);
+  }
+
+  /** Droit d'acces et de portabilite : copie complete des donnees du compte (JSON). */
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('export')
+  async exportAll(@CurrentUser() user: AuthenticatedUser, @Res() res: Response) {
+    const data = await this.account.exportAll(user.id);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="carne-mes-donnees-${date}.json"`);
+    res.send(JSON.stringify(data, null, 2));
+  }
+
+  /** Donnees d'un seul client ou fournisseur (demande d'acces de cette personne). */
+  @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('export/customers/:id')
+  async exportParty(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    const data = await this.account.exportParty(user.id, id);
+    if (!data) throw new NotFoundException('Client introuvable');
+    return data;
   }
 
   @ApiBearerAuth()

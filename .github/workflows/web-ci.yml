@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'ardoiz-web/**'
+      - 'deploy/**'
       - 'ardoiz-backend/src/subscription/plan.constants.ts'
       - 'ardoiz-backend/src/common/legal.ts'
       - 'ardoiz-app/lib/core/legal.dart'
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - 'ardoiz-web/**'
+      - 'deploy/**'
       - 'ardoiz-backend/src/subscription/plan.constants.ts'
       - 'ardoiz-backend/src/common/legal.ts'
       - 'ardoiz-app/lib/core/legal.dart'
@@ -62,7 +64,7 @@ jobs:
           npm run prisma:generate
           npm run build
           npx prisma migrate deploy
-      - name: Start backend (simulated SMS: the OTP code is returned in development mode)
+      - name: "Start backend (simulated SMS, the OTP code is returned in development mode)"
         working-directory: ardoiz-backend
         run: |
           nohup node dist/main.js > /tmp/backend.log 2>&1 &
@@ -87,3 +89,48 @@ jobs:
       - name: Backend log on failure
         if: failure()
         run: tail -n 100 /tmp/backend.log
+
+  # Infrastructure : cohérence statique, Caddyfile valide, compose valide, sauvegarde chiffrée
+  # et restauration sur une vraie base, image web construite.
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PGHOST: localhost
+      PGUSER: carne
+      PGPASSWORD: carne
+      PGDATABASE: carne_check
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: carne
+          POSTGRES_PASSWORD: carne
+          POSTGRES_DB: carne_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carne"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test deploy/test/deploy.test.mjs
+      - name: Compose valide
+        working-directory: deploy
+        run: |
+          touch .env
+          DB_PASSWORD=x DOMAIN=carne.example ACME_EMAIL=a@b.c BACKUP_AGE_RECIPIENT=age1x docker compose config -q
+      - name: Image web (Caddy + site) et Caddyfile valide
+        run: |
+          docker build -f deploy/Dockerfile.web -t carne-web .
+          docker run --rm -e DOMAIN=carne.example -e ACME_EMAIL=a@b.c carne-web caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm carne-web sh -c 'test -f /srv/web/index.html && test -f /srv/web/app/index.html && test ! -e /srv/web/test && test ! -e /srv/web/package.json'
+      - name: Sauvegarde chiffrée et restauration (base de test avec un compte)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq age postgresql-client
+          psql -c "CREATE TABLE users (id int primary key, phone text); INSERT INTO users VALUES (1, '+22900000000');"
+          sh deploy/test/backup-restore.sh

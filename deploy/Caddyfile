@@ -1,0 +1,66 @@
+# Un seul domaine : le site, le client web (/app/) et l'API (/api/) partagent la meme origine,
+# donc aucune configuration CORS et une CSP qui n'autorise que 'self'.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Journal d'acces SANS adresse IP ni en-tetes (donnees personnelles inutiles), conserve 30 jours.
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10MiB
+			roll_keep 20
+			roll_keep_for 720h
+		}
+		format filter {
+			wrap json
+			fields {
+				request>remote_ip delete
+				request>client_ip delete
+				request>remote_port delete
+				request>headers delete
+			}
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy same-origin
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
+	handle /app/* {
+		root * /srv/web
+		header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		# Toujours la derniere version du client et de son service worker.
+		header /app/sw.js Cache-Control "no-cache"
+		header /app/index.html Cache-Control "no-cache"
+		file_server
+	}
+
+	handle {
+		root * /srv/web
+		header Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	handle_errors {
+		@notfound expression {err.status_code} == 404
+		handle @notfound {
+			root * /srv/web
+			rewrite * /404.html
+			file_server
+		}
+	}
+}

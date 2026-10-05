@@ -1,0 +1,92 @@
+name: Release Android
+
+# Produit l'app bundle (a envoyer sur Google Play) et l'APK SIGNES avec la cle de publication.
+# Declenchement : etiquette "app-v0.2.0" (ou lancement manuel). Aucune cle n'est dans le depot :
+# elles sont lues depuis les "secrets" du depot GitHub (voir docs/guide-deploiement.md, etape 10).
+on:
+  push:
+    tags: ['app-v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CARNE_API_BASE_URL: ${{ vars.CARNE_API_BASE_URL }}
+      CARNE_WEB_URL: ${{ vars.CARNE_WEB_URL }}
+    defaults:
+      run:
+        working-directory: ardoiz-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verifier que la configuration de production est complete
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for v in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD CARNE_API_BASE_URL CARNE_WEB_URL; do
+            eval "val=\${$v:-}"
+            [ -n "$val" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then echo "::error::Valeurs manquantes :$missing"; exit 1; fi
+          case "$CARNE_API_BASE_URL" in https://*) ;; *) echo "::error::CARNE_API_BASE_URL doit commencer par https://"; exit 1;; esac
+          case "$CARNE_WEB_URL" in https://*) ;; *) echo "::error::CARNE_WEB_URL doit commencer par https://"; exit 1;; esac
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.6
+          cache: true
+
+      - name: Cle de publication (reconstituee ici, jamais conservee)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          {
+            echo "storeFile=upload-keystore.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+
+      - run: flutter pub get
+      - name: Analyse et tests avant publication
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: App bundle (Google Play)
+        run: flutter build appbundle --release --dart-define=CARNE_API_BASE_URL="$CARNE_API_BASE_URL" --dart-define=CARNE_WEB_URL="$CARNE_WEB_URL"
+      - name: APK (installation directe, tests terrain)
+        run: flutter build apk --release --dart-define=CARNE_API_BASE_URL="$CARNE_API_BASE_URL" --dart-define=CARNE_WEB_URL="$CARNE_WEB_URL"
+
+      - name: Verifier que la signature n'est PAS celle de debogage
+        run: |
+          apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | tee /tmp/cert.txt
+          if grep -qi "Android Debug" /tmp/cert.txt; then echo "::error::APK signe avec la cle de debogage"; exit 1; fi
+
+      - name: Nettoyage de la cle
+        if: always()
+        run: rm -f android/upload-keystore.jks android/key.properties
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carne-android-${{ github.ref_name }}
+          path: |
+            ardoiz-app/build/app/outputs/bundle/release/app-release.aab
+            ardoiz-app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30

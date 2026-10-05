@@ -10,19 +10,25 @@ Principe directeur : **hors ligne d'abord**. Chaque saisie est enregistrée imm�
 | --- | --- |
 | `ardoiz-app/` | Application mobile Flutter (Android) |
 | `ardoiz-backend/` | API NestJS, Prisma, PostgreSQL |
-| `ardoiz-web/` | Vitrine statique (sans JavaScript) et politique de confidentialité |
+| `ardoiz-web/` | Vitrine statique (sans JavaScript), pages légales, et **client web en ligne** (`app/`, JavaScript natif sans outil de build) |
+| `deploy/` | Production : Docker Compose, Caddy (HTTPS), sauvegardes chiffrées, scripts de contrôle |
+| `docs/` | `guide-deploiement.md` (pas à pas) et `conformite/` (registre des traitements, procédures, dossier APDP) |
 | `brand/` | Logo (SVG) et script de génération des icônes (`node brand/render.mjs`) |
-| `.github/workflows/` | CI : backend, Flutter (analyse, tests, intégration réelle), site |
+| `.github/workflows/` | CI : backend (dont image Docker), Flutter, web (dont navigateur réel), release Android signée |
+
+Carné est conçu et développé par **CIVORA CONSEIL ET SOLUTIONS**.
 
 Les noms de dossiers `ardoiz-*` sont conservés pour ne pas casser l'historique ; la marque est Carné.
 
 ## Fonctions de l'application
 
 - Compte par numéro de téléphone : code SMS, puis code PIN à 4 chiffres (verrouillage après 5 erreurs).
-- Clients (plafond de crédit facultatif), dettes (motif, catégorie, échéance), remboursements partiels ou totaux, statuts calculés (à payer, partielle, soldée, en retard).
+- Clients (plafond de crédit facultatif), **fournisseurs** (ce que je dois), **caisse** (ventes au comptant, dépenses, trésorerie), dettes (motif, catégorie, échéance), remboursements partiels ou totaux, statuts calculés (à payer, partielle, soldée, en retard).
 - Relances : SMS envoyé par Carné (service SMS du serveur), ou SMS et WhatsApp ouverts depuis le téléphone avec un message prêt au bon montant.
 - Tableau de bord Premium calculé sur le téléphone (retards, clients à surveiller, catégories, tendance sur 6 mois, taux de paiement à temps).
 - Relances automatiques Premium, abonnement, export CSV, changement de PIN, suppression du compte.
+- Vie privée : consentement explicite versionné, export complet (JSON) et par personne, journal d'activité du compte, opposition d'un client aux relances, suppression du compte.
+- Carné en ligne (navigateur) : mêmes fonctions avec une connexion ; l'application Android reste la seule à fonctionner hors connexion.
 - Synchronisation : file d'envoi persistante, ids générés sur le téléphone (envois rejouables sans doublon), conflits expliqués à l'utilisateur (modifications refusées, à réessayer ou abandonner).
 
 ## Architecture en bref
@@ -72,25 +78,26 @@ CARNE_BACKEND_URL=http://localhost:3000/api/v1 flutter test test/integration
 
 Une version de production exige une adresse **HTTPS** (`--dart-define=CARNE_API_BASE_URL=https://...`).
 
-### Site
+### Site et client web
 
 ```bash
 cd ardoiz-web
-npm test       # sécurité (aucun script, CSP stricte), liens, accessibilité de base, cohérence des prix avec le backend
-npm start      # http://localhost:8080
+npm test        # site : CSP stricte, liens, accessibilité ; client : aucun innerHTML, unités, cohérence avec le serveur
+npm start       # http://127.0.0.1:8081 : site + client en ligne, /api relayé vers le backend (127.0.0.1:3998)
+npm run test:e2e   # navigateur réel (Playwright) contre un backend démarré hors production
 ```
 
-## Avant une mise en production
+Le test de bout en bout lit la variable `PLAYWRIGHT_PATH` (chemin de `playwright/index.mjs`), `DATABASE_URL` (pour simuler le temps qui passe) et utilise le CLI d'administration compilé du backend.
 
-À faire par l'éditeur : ces points ne peuvent pas être réglés par le code seul.
+## Mise en production
 
-1. **Paiement Mobile Money** : l'appel réel à l'agrégateur (CinetPay ou PayDunya) n'est pas écrit, faute de contrat d'API et d'identifiants. Tant que `MobileMoneyService.REAL_INTEGRATION_IMPLEMENTED` vaut `false`, l'abonnement et les demandes de paiement sont désactivés en production, et l'application l'indique. Le webhook de confirmation (`/webhooks/mobile-money`) est prêt mais devra être aligné sur le format réel de l'agrégateur.
-2. **SMS** : renseigner `SMS_USERNAME`, `SMS_API_KEY`, `SMS_SENDER_ID` (Africa's Talking). L'intégration est écrite mais n'a pas été essayée sur un compte réel. Sans fournisseur, la production refuse d'envoyer un code plutôt que de le simuler.
-3. **WhatsApp automatique** par le serveur : non implémenté (les relances WhatsApp se font depuis le téléphone).
-4. **Secrets** : trois secrets JWT distincts de 32 caractères ou plus, secret de webhook, `TRUST_PROXY` égal au nombre de proxys devant l'API, base PostgreSQL sauvegardée. L'API refuse de démarrer avec les valeurs d'exemple.
-5. **Signature Android** : créer `ardoiz-app/android/key.properties` (jamais versionné) avec `keyAlias`, `keyPassword`, `storeFile`, `storePassword`. Sans ce fichier, la version release est signée avec la clé de débogage et ne doit pas être publiée.
-6. **Identité légale** : compléter les passages `[à compléter]` de `ardoiz-web/confidentialite.html` (éditeur, hébergeur, contact, durées) et la faire relire par un juriste.
-7. **Hébergement du site** : appliquer les en-têtes de `ardoiz-web/_headers` (ou leur équivalent) et ajouter le lien de téléchargement quand l'application est publiée.
+Tout est dans **[docs/guide-deploiement.md](docs/guide-deploiement.md)** : domaine, serveur, configuration, SMS, paiement, Android et Google Play, APDP, pilote, exploitation, liste de contrôle. Points à retenir :
+
+1. **Paiement Mobile Money (FedaPay)** : l'appel réel n'est pas écrit (FedaPay n'était pas joignable depuis l'environnement de développement). Tant que `MobileMoneyService.REAL_INTEGRATION_IMPLEMENTED` vaut `false`, l'abonnement et les demandes de paiement sont fermés en production et l'application l'indique. Le script `ardoiz-backend/scripts/fedapay-sandbox-check.mjs` vérifie l'accès au bac à sable ; son résultat servira à écrire l'intégration.
+2. **SMS** : `SMS_USERNAME`, `SMS_API_KEY`, `SMS_SENDER_ID` (Africa's Talking). Écrit mais pas essayé sur un compte réel.
+3. **Secrets** : jamais dans le dépôt (un test le vérifie). L'API refuse de démarrer avec les valeurs d'exemple.
+4. **Signature Android** : produite par la CI (`release-android.yml`) à partir de secrets GitHub ; elle refuse une signature de débogage.
+5. **Textes juridiques** : les passages `[à compléter]` et `[à confirmer]` sont volontairement visibles ; liste dans `docs/conformite/points-a-completer.md`.
 
 ## Limites connues
 
@@ -99,3 +106,5 @@ npm start      # http://localhost:8080
 - Les numéros de clients sont acceptés dans un format large (8 à 20 caractères) ; WhatsApp exige un indicatif pays.
 - L'application n'a pas pu être compilée pour Android dans l'environnement de développement utilisé (pas de SDK Android) : les tests Flutter s'exécutent sur la machine hôte avec le même SQLCipher, mais un essai sur un vrai téléphone reste à faire avant diffusion.
 - Les anciennes données de la version « Ardoiz » ne sont pas migrées.
+- Les images Docker et le fichier Caddy n'ont pas pu être exécutés dans l'environnement de développement (pas de moteur Docker) : la CI les construit et les valide, le premier déploiement est leur premier essai réel.
+- Le logo de CIVORA n'est pas intégré (aucun fichier disponible) ; le nom l'est partout.

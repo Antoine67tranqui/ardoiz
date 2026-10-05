@@ -1,0 +1,7 @@
+# Site vitrine + client web + Caddy (HTTPS automatique, reverse proxy vers l'API).
+# Contexte de build : la racine du depot. Seuls les fichiers publics sont copies (jamais les tests).
+FROM caddy:2-alpine
+COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY ardoiz-web/index.html ardoiz-web/404.html ardoiz-web/confidentialite.html ardoiz-web/conditions.html ardoiz-web/mentions-legales.html ardoiz-web/styles.css ardoiz-web/robots.txt /srv/web/
+COPY ardoiz-web/assets /srv/web/assets
+COPY ardoiz-web/app /srv/web/app

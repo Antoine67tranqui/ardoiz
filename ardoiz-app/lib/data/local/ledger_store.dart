@@ -27,13 +27,15 @@ class LedgerStore {
   void upsertCustomer(Customer customer) => _db.write((db) {
         db.execute(
           '''
-          INSERT INTO customers (id, name, phone, credit_limit_cents, created_at)
-          VALUES (?, ?, ?, ?, ?)
+          INSERT INTO customers (id, name, phone, credit_limit_cents, created_at, kind, reminder_opt_out)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             phone = excluded.phone,
             credit_limit_cents = excluded.credit_limit_cents,
-            created_at = excluded.created_at
+            created_at = excluded.created_at,
+            kind = excluded.kind,
+            reminder_opt_out = excluded.reminder_opt_out
           ''',
           [
             customer.id,
@@ -41,6 +43,8 @@ class LedgerStore {
             customer.phone,
             customer.creditLimit?.cents,
             _iso(customer.createdAt),
+            customer.kind.wire,
+            customer.reminderOptOut ? 1 : 0,
           ],
         );
       });
@@ -109,6 +113,35 @@ class LedgerStore {
 
   void deletePayment(String id) => _db.write((db) => db.execute('DELETE FROM payments WHERE id = ?', [id]));
 
+  // ---- Journal de caisse ----
+
+  List<CashEntry> cashEntries() => _db.read(
+        (db) => db.select('SELECT * FROM cash_entries ORDER BY occurred_at DESC, id').map(_cash).toList(),
+      );
+
+  CashEntry? cashEntry(String id) => _db.read((db) {
+        final rows = db.select('SELECT * FROM cash_entries WHERE id = ?', [id]);
+        return rows.isEmpty ? null : _cash(rows.first);
+      });
+
+  void upsertCashEntry(CashEntry entry) => _db.write((db) {
+        db.execute(
+          '''
+          INSERT INTO cash_entries (id, type, amount_cents, label, category, occurred_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            type = excluded.type,
+            amount_cents = excluded.amount_cents,
+            label = excluded.label,
+            category = excluded.category,
+            occurred_at = excluded.occurred_at
+          ''',
+          [entry.id, entry.type.wire, entry.amount.cents, entry.label, entry.category, _iso(entry.occurredAt)],
+        );
+      });
+
+  void deleteCashEntry(String id) => _db.write((db) => db.execute('DELETE FROM cash_entries WHERE id = ?', [id]));
+
   // ---- Descendants (pour annuler les envois d'une suppression en cascade) ----
 
   Set<String> debtIdsOfCustomer(String customerId) => _db.read(
@@ -155,6 +188,8 @@ class LedgerStore {
         phone: r['phone']! as String,
         creditLimit: r['credit_limit_cents'] == null ? null : Money.fromCents(r['credit_limit_cents']! as int),
         createdAt: DateTime.parse(r['created_at']! as String),
+        kind: PartyKind.fromWire(r['kind'] as String?),
+        reminderOptOut: (r['reminder_opt_out'] as int? ?? 0) != 0,
       );
 
   static Debt _debt(Row r) => Debt(
@@ -165,6 +200,15 @@ class LedgerStore {
         category: r['category']! as String,
         dueDate: r['due_date'] == null ? null : DateTime.parse(r['due_date']! as String),
         createdAt: DateTime.parse(r['created_at']! as String),
+      );
+
+  static CashEntry _cash(Row r) => CashEntry(
+        id: r['id']! as String,
+        type: CashType.fromWire(r['type']! as String),
+        amount: Money.fromCents(r['amount_cents']! as int),
+        label: r['label'] as String?,
+        category: r['category']! as String,
+        occurredAt: DateTime.parse(r['occurred_at']! as String),
       );
 
   static Payment _payment(Row r) => Payment(

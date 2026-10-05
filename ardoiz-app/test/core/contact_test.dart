@@ -42,6 +42,13 @@ void main() {
       expect(foldForSearch('Aïcha ÉLÈVE Œuvre Çà'), 'aicha eleve ouvre ca');
     });
 
+    test('foldForFileName : nom de fichier sûr et lisible', () {
+      expect(foldForFileName('Aïcha Traoré'), 'aicha-traore');
+      expect(foldForFileName('../../etc/passwd'), 'etc-passwd');
+      expect(foldForFileName('  !!!  '), 'sans-nom');
+      expect(foldForFileName('x' * 100).length, 40);
+    });
+
     test('digitsOnly', () => expect(digitsOnly('+229 (01) 67-00'), '2290167 00'.replaceAll(' ', '')));
   });
 }

@@ -68,7 +68,7 @@ jobs:
           JWT_REFRESH_SECRET=ci-refresh-secret-0123456789abcdef0123456789 \
           JWT_OTP_SECRET=ci-otp-secret-0123456789abcdef0123456789abcdef \
           MOMO_WEBHOOK_SECRET=ci-webhook-secret-0123456789abcdef0123456789 \
-          TRUST_PROXY=0 \
+          TRUST_PROXY=1 \
           nohup node dist/main.js > backend.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:3998/api/v1/health && exit 0; sleep 2; done
           cat backend.log; exit 1

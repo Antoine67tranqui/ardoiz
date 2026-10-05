@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../ui/screens/auth/consent_screen.dart';
 import '../ui/screens/auth/login_screen.dart';
 import '../ui/screens/auth/otp_screen.dart';
 import '../ui/screens/auth/pin_setup_screen.dart';
@@ -9,11 +10,14 @@ import '../ui/screens/auth/signup_phone_screen.dart';
 import '../ui/screens/auth/welcome_screen.dart';
 import '../ui/screens/customers/customer_detail_screen.dart';
 import '../ui/screens/customers/customer_form_screen.dart';
+import '../domain/models.dart';
+import '../ui/screens/cash/cash_screen.dart';
 import '../ui/screens/customers/customers_screen.dart';
 import '../ui/screens/dashboard/dashboard_screen.dart';
 import '../ui/screens/debts/debt_detail_screen.dart';
 import '../ui/screens/debts/debt_form_screen.dart';
 import '../ui/screens/home_shell.dart';
+import '../ui/screens/settings/activity_screen.dart';
 import '../ui/screens/settings/business_name_screen.dart';
 import '../ui/screens/settings/change_pin_screen.dart';
 import '../ui/screens/settings/delete_account_screen.dart';
@@ -30,8 +34,10 @@ import 'session_service.dart';
 String? redirectFor(SessionState session, String location) {
   final isPublic = Routes.publicPaths.contains(location);
   switch (session) {
-    case SignedIn():
-      return isPublic || location == '/' ? Routes.customers : null;
+    case SignedIn(:final profile):
+      // Nouvelle version des conditions : acceptation obligatoire avant tout usage.
+      if (!profile.termsAccepted) return location == Routes.consent ? null : Routes.consent;
+      return isPublic || location == '/' || location == Routes.consent ? Routes.customers : null;
     case SignedOut(:final reason, :final phone):
       if (isPublic) return null;
       // Session expirée : retour direct à la saisie du PIN, numéro déjà rempli.
@@ -63,16 +69,23 @@ GoRouter buildRouter(Ref ref, {String? initialLocation}) {
       GoRoute(path: Routes.login, builder: (_, _) => const LoginScreen()),
       GoRoute(path: Routes.signup, builder: (_, _) => const SignupPhoneScreen()),
       GoRoute(path: Routes.signupCode, builder: (_, _) => const OtpScreen()),
+      GoRoute(path: Routes.consent, builder: (_, _) => const ConsentScreen()),
       GoRoute(path: Routes.signupPin, builder: (_, _) => const PinSetupScreen()),
       ShellRoute(
         builder: (context, state, child) => HomeShell(location: state.uri.path, child: child),
         routes: <RouteBase>[
           GoRoute(path: Routes.customers, pageBuilder: (_, _) => const NoTransitionPage<void>(child: CustomersScreen())),
+          GoRoute(
+            path: Routes.suppliers,
+            pageBuilder: (_, _) => const NoTransitionPage<void>(child: CustomersScreen(kind: PartyKind.supplier)),
+          ),
+          GoRoute(path: Routes.cash, pageBuilder: (_, _) => const NoTransitionPage<void>(child: CashScreen())),
           GoRoute(path: Routes.dashboard, pageBuilder: (_, _) => const NoTransitionPage<void>(child: DashboardScreen())),
           GoRoute(path: Routes.settings, pageBuilder: (_, _) => const NoTransitionPage<void>(child: SettingsScreen())),
         ],
       ),
       // « new » avant « :id » : sinon « new » serait lu comme un identifiant.
+      GoRoute(path: Routes.supplierNew, builder: (_, _) => const CustomerFormScreen(kind: PartyKind.supplier)),
       GoRoute(path: Routes.customerNew, builder: (_, _) => const CustomerFormScreen()),
       GoRoute(path: '/customers/:id', builder: (_, s) => CustomerDetailScreen(customerId: s.pathParameters['id']!)),
       GoRoute(path: '/customers/:id/edit', builder: (_, s) => CustomerFormScreen(customerId: s.pathParameters['id'])),
@@ -82,6 +95,7 @@ GoRouter buildRouter(Ref ref, {String? initialLocation}) {
       GoRoute(path: Routes.subscription, builder: (_, _) => const SubscriptionScreen()),
       GoRoute(path: Routes.reminderRules, builder: (_, _) => const ReminderRulesScreen()),
       GoRoute(path: Routes.changePin, builder: (_, _) => const ChangePinScreen()),
+      GoRoute(path: Routes.activity, builder: (_, _) => const ActivityScreen()),
       GoRoute(path: Routes.deleteAccount, builder: (_, _) => const DeleteAccountScreen()),
       GoRoute(path: Routes.businessName, builder: (_, _) => const BusinessNameScreen()),
       GoRoute(path: Routes.syncIssues, builder: (_, _) => const SyncIssuesScreen()),

@@ -11,7 +11,13 @@ class HomeShell extends StatelessWidget {
   final String location;
   final Widget child;
 
-  static const List<String> _tabs = <String>[Routes.customers, Routes.dashboard, Routes.settings];
+  static const List<String> _tabs = <String>[
+    Routes.customers,
+    Routes.suppliers,
+    Routes.cash,
+    Routes.dashboard,
+    Routes.settings,
+  ];
 
   int get _index {
     final i = _tabs.indexWhere(location.startsWith);
@@ -20,23 +26,52 @@ class HomeShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: <Widget>[
-              const SyncBanner(),
-              Expanded(child: child),
-            ],
+    body: SafeArea(
+      bottom: false,
+      child: Column(
+        children: <Widget>[
+          const SyncBanner(),
+          Expanded(child: child),
+        ],
+      ),
+    ),
+    // La barre d'onglets a une hauteur fixe : au-delà de 130 % de taille de texte, les libellés
+    // débordent. Le contenu de la page, lui, suit le réglage complet de l'utilisateur.
+    bottomNavigationBar: MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3),
+      ),
+      child: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (i) => context.go(_tabs[i]),
+        destinations: const <NavigationDestination>[
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'Clients',
           ),
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => context.go(_tabs[i]),
-          destinations: const <NavigationDestination>[
-            NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Clients'),
-            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Tableau de bord'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'Réglages'),
-          ],
-        ),
-      );
+          NavigationDestination(
+            icon: Icon(Icons.local_shipping_outlined),
+            selectedIcon: Icon(Icons.local_shipping),
+            label: 'Fournisseurs',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.point_of_sale_outlined),
+            selectedIcon: Icon(Icons.point_of_sale),
+            label: 'Caisse',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.insights_outlined),
+            selectedIcon: Icon(Icons.insights),
+            label: 'Bilan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Réglages',
+          ),
+        ],
+      ),
+    ),
+  );
 }

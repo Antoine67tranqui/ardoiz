@@ -10,20 +10,23 @@ import '../../widgets/auth_widgets.dart';
 import '../../widgets/common.dart';
 
 /// Saisie d'un remboursement en espèces ; renvoie vrai si un paiement a été enregistré.
-Future<bool> showPaymentSheet(BuildContext context, DebtView debt) async {
+Future<bool> showPaymentSheet(BuildContext context, DebtView debt, {bool toSupplier = false}) async {
   final saved = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (context) => PaymentSheet(debt: debt),
+    builder: (context) => PaymentSheet(debt: debt, toSupplier: toSupplier),
   );
   return saved ?? false;
 }
 
 class PaymentSheet extends ConsumerStatefulWidget {
-  const PaymentSheet({super.key, required this.debt});
+  const PaymentSheet({super.key, required this.debt, this.toSupplier = false});
 
   final DebtView debt;
+
+  /// Paiement fait à un fournisseur (et non reçu d'un client).
+  final bool toSupplier;
 
   @override
   ConsumerState<PaymentSheet> createState() => _PaymentSheetState();
@@ -64,9 +67,9 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text('Enregistrer un paiement', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(widget.toSupplier ? 'Payer un fournisseur' : 'Enregistrer un paiement', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              Text('Paiement reçu en espèces. Reste à payer : ${formatMoney(_remaining)}.', style: theme.textTheme.bodyMedium),
+              Text('${widget.toSupplier ? 'Paiement fait en espèces' : 'Paiement reçu en espèces'}. Reste à payer : ${formatMoney(_remaining)}.', style: theme.textTheme.bodyMedium),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _amount,
@@ -74,7 +77,7 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 textInputAction: TextInputAction.done,
                 style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                decoration: const InputDecoration(labelText: 'Montant reçu', suffixText: 'FCFA'),
+                decoration: InputDecoration(labelText: widget.toSupplier ? 'Montant payé' : 'Montant reçu', suffixText: 'FCFA'),
                 validator: (value) => Validators.amount(value, max: _remaining),
                 onFieldSubmitted: (_) => _save(),
               ),

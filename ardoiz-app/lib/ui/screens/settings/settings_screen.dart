@@ -10,6 +10,7 @@ import '../../../core/brand.dart';
 import '../../../core/formatters.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy_widgets.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -20,6 +21,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _exporting = false;
+  bool _exportingData = false;
   bool _loggingOut = false;
 
   @override
@@ -85,6 +87,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'Les autres appareils seront déconnectés',
             onTap: () => context.push(Routes.changePin),
           ),
+          const SectionTitle('Vie privée et données'),
+          _Tile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Ce que Carné fait de vos données',
+            subtitle: 'Conditions d\'utilisation et confidentialité',
+            onTap: () => showPrivacySummary(context),
+          ),
+          _Tile(
+            icon: Icons.download_for_offline_outlined,
+            title: 'Exporter toutes mes données',
+            subtitle: 'Copie complète au format JSON (nécessite une connexion)',
+            trailing: _exportingData ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)) : null,
+            onTap: _exportingData ? null : _exportMyData,
+          ),
+          _Tile(
+            icon: Icons.history,
+            title: 'Activité du compte',
+            subtitle: 'Connexions et changements récents',
+            onTap: () => context.push(Routes.activity),
+          ),
           _Tile(
             icon: Icons.delete_forever_outlined,
             iconColor: theme.colorScheme.error,
@@ -123,6 +145,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: '${Brand.name} ${Brand.version}',
             subtitle: 'Vos données sont chiffrées sur ce téléphone et fonctionnent sans connexion.',
           ),
+          const _Tile(
+            icon: Icons.handshake_outlined,
+            title: 'Conçu et développé par',
+            subtitle: Brand.publisher,
+          ),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),
@@ -155,6 +182,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (mounted) showSnack(context, describeError(e));
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _exportMyData() async {
+    setState(() => _exportingData = true);
+    try {
+      final file = await ref.read(backendApiProvider).exportMyData();
+      await ref.read(fileSharerProvider).share(fileName: file.fileName, bytes: file.bytes, mimeType: 'application/json');
+    } on Object catch (e) {
+      if (mounted) showSnack(context, describeError(e));
+    } finally {
+      if (mounted) setState(() => _exportingData = false);
     }
   }
 

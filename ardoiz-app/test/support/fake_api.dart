@@ -57,7 +57,12 @@ class FakeBackendApi implements BackendApi {
   }
 
   @override
-  Future<SessionTokens> setupPin({required String otpSessionToken, required String businessName, required String pin}) async {
+  Future<SessionTokens> setupPin({
+    required String otpSessionToken,
+    required String businessName,
+    required String pin,
+    required String termsVersion,
+  }) async {
     _enter('setupPin');
     final phone = otpSessionToken.replaceFirst('otp-', '');
     final account = accounts[phone] ?? addAccount(phone: phone, pin: pin, business: businessName);

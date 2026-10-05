@@ -4,7 +4,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'app_database.dart';
 
-enum OutboxEntity { customer, debt, payment }
+enum OutboxEntity { customer, debt, payment, cashEntry }
 
 enum OutboxOp { create, update, delete }
 

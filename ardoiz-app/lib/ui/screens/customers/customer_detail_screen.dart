@@ -6,6 +6,7 @@ import '../../../app/providers.dart';
 import '../../../app/routes.dart';
 import '../../../core/contact.dart';
 import '../../../core/formatters.dart';
+import '../../../core/text.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/models.dart';
 import '../../widgets/common.dart';
@@ -39,9 +40,10 @@ class CustomerDetailScreen extends ConsumerWidget {
           PopupMenuButton<_Action>(
             tooltip: 'Plus d\'actions',
             onSelected: (action) => _onAction(context, ref, view, action),
-            itemBuilder: (context) => const <PopupMenuEntry<_Action>>[
-              PopupMenuItem<_Action>(value: _Action.edit, child: Text('Modifier le client')),
-              PopupMenuItem<_Action>(value: _Action.delete, child: Text('Supprimer le client')),
+            itemBuilder: (context) => <PopupMenuEntry<_Action>>[
+              PopupMenuItem<_Action>(value: _Action.edit, child: Text(view.customer.isSupplier ? 'Modifier le fournisseur' : 'Modifier le client')),
+              const PopupMenuItem<_Action>(value: _Action.export, child: Text('Exporter les données de cette personne')),
+              PopupMenuItem<_Action>(value: _Action.delete, child: Text(view.customer.isSupplier ? 'Supprimer le fournisseur' : 'Supprimer le client')),
             ],
           ),
         ],
@@ -49,7 +51,7 @@ class CustomerDetailScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(Routes.debtNew(customerId)),
         icon: const Icon(Icons.add),
-        label: const Text('Nouvelle dette'),
+        label: Text(view.customer.isSupplier ? 'Nouvel achat à crédit' : 'Nouvelle dette'),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
@@ -58,12 +60,14 @@ class CustomerDetailScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           _BalanceCard(view),
           if (open.isEmpty && settled.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 32),
+            Padding(
+              padding: const EdgeInsets.only(top: 32),
               child: EmptyState(
                 icon: Icons.receipt_long_outlined,
                 title: 'Aucune dette',
-                message: 'Notez ce que ce client vous doit avec « Nouvelle dette ».',
+                message: view.customer.isSupplier
+                    ? 'Notez ce que vous devez à ce fournisseur avec « Nouvel achat à crédit ».'
+                    : 'Notez ce que ce client vous doit avec « Nouvelle dette ».',
               ),
             ),
           if (open.isNotEmpty) ...<Widget>[
@@ -83,6 +87,14 @@ class CustomerDetailScreen extends ConsumerWidget {
     switch (action) {
       case _Action.edit:
         await context.push(Routes.customerEdit(view.customer.id));
+      case _Action.export:
+        try {
+          final fileName = 'carne-${view.customer.isSupplier ? 'fournisseur' : 'client'}-${foldForFileName(view.customer.name)}.json';
+          final file = await ref.read(backendApiProvider).exportPartyData(view.customer.id, fileName: fileName);
+          await ref.read(fileSharerProvider).share(fileName: file.fileName, bytes: file.bytes, mimeType: 'application/json');
+        } on Object catch (e) {
+          if (context.mounted) showSnack(context, view.pendingSync ? 'Cette fiche n\'est pas encore synchronisée : réessayez dans un instant.' : describeError(e));
+        }
       case _Action.delete:
         final debtCount = view.debts.length;
         final ok = await confirm(
@@ -105,7 +117,7 @@ class CustomerDetailScreen extends ConsumerWidget {
   }
 }
 
-enum _Action { edit, delete }
+enum _Action { edit, export, delete }
 
 class _Header extends ConsumerWidget {
   const _Header(this.view);
@@ -126,7 +138,19 @@ class _Header extends ConsumerWidget {
             children: <Widget>[
               Text(view.customer.name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               Text(formatPhone(phone), style: theme.textTheme.bodyMedium),
-              Text('Client depuis le ${formatDate(view.customer.createdAt)}', style: theme.textTheme.bodySmall),
+              Text(
+                '${view.customer.isSupplier ? 'Fournisseur' : 'Client'} depuis le ${formatDate(view.customer.createdAt)}',
+                style: theme.textTheme.bodySmall,
+              ),
+              if (view.customer.reminderOptOut)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(children: <Widget>[
+                    Icon(Icons.notifications_off_outlined, size: 16, color: theme.colorScheme.error),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text('Refuse les relances', style: TextStyle(color: theme.colorScheme.error, fontWeight: FontWeight.w600))),
+                  ]),
+                ),
             ],
           ),
         ),
@@ -176,7 +200,7 @@ class _BalanceCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Solde dû', style: theme.textTheme.labelLarge),
+            Text(view.customer.isSupplier ? 'Reste à payer' : 'Solde dû', style: theme.textTheme.labelLarge),
             MoneyText(
               view.outstanding,
               color: view.isUpToDate ? colors.paid : null,

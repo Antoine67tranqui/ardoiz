@@ -50,6 +50,7 @@ class Bootstrap {
     required this.secrets,
     required this.databasePath,
     this.apiBaseUrl = ApiConfig.baseUrl,
+    this.websiteUrl = ApiConfig.websiteUrl,
     this.release = false,
     this.overrides = const <Override>[],
   });
@@ -59,12 +60,15 @@ class Bootstrap {
   /// Chemin du fichier de la base (dossier privé de l'application).
   final Future<String> Function() databasePath;
   final String apiBaseUrl;
+  final String websiteUrl;
   final bool release;
   final List<Override> overrides;
 
   Future<BootstrapResult> run() async {
     final configError = ApiConfig.validate(apiBaseUrl, release: release);
-    if (configError != null) return BootstrapFailed(BootstrapProblem.configuration, configError);
+    final siteError = ApiConfig.validateWebsite(websiteUrl, release: release);
+    final problem = configError ?? siteError;
+    if (problem != null) return BootstrapFailed(BootstrapProblem.configuration, problem);
 
     final AppDatabase db;
     try {

@@ -8,6 +8,8 @@ Money fcfa(int v) => Money.fromCents(v * 100);
 
 final DateTime now = DateTime.utc(2026, 10, 15, 12);
 
+Customer supplierOf(String name) => Customer(id: 's-$name', name: name, phone: '+22905', createdAt: now, kind: PartyKind.supplier);
+
 void main() {
   int seq = 0;
   Customer customer(String name) => Customer(id: 'c-$name', name: name, phone: '+22901', createdAt: now);
@@ -151,5 +153,36 @@ void main() {
       entry('B', 2000),
     ]);
     expect(s.totalOutstanding, fcfa(2000));
+  });
+  test('les fournisseurs sont totalisés à part : ni créance, ni retard client, ni client compté', () {
+    final supplier = supplierOf('Grossiste');
+    final debts = <Debt>[
+      Debt(id: 'f1', customerId: supplier.id, amount: fcfa(8000), category: 'Alimentation', dueDate: now.subtract(const Duration(days: 2)), createdAt: now),
+      Debt(id: 'f2', customerId: supplier.id, amount: fcfa(1000), category: 'Alimentation', createdAt: now),
+      Debt(id: 'f3', customerId: supplier.id, amount: fcfa(500), category: 'Alimentation', createdAt: now),
+    ];
+    final payments = <Payment>[
+      Payment(id: 'p1', debtId: 'f2', amount: fcfa(1000), method: PaymentMethod.cash, paidAt: now), // soldée
+      Payment(id: 'p2', debtId: 'f3', amount: fcfa(200), method: PaymentMethod.cash, paidAt: now),
+    ];
+    final client = customer('Aicha');
+    final views = Ledger.customerViews(
+      customers: <Customer>[supplier, client],
+      debts: <Debt>[...debts, Debt(id: 'c1', customerId: client.id, amount: fcfa(300), category: 'Autre', createdAt: now)],
+      payments: payments,
+      pendingIds: const <String>{},
+      now: now,
+    );
+
+    final s = DashboardCalculator.compute(views, now);
+
+    expect(s.totalOutstanding, fcfa(300), reason: 'seulement ce que les clients me doivent');
+    expect(s.totalCustomers, 1);
+    expect(s.customersWithDebt, 1);
+    expect(s.overdue, isEmpty);
+    expect(s.totalPayable, fcfa(8300)); // 8000 + 300 restant sur f3
+    expect(s.payableOverdue, fcfa(8000));
+    expect(s.suppliersWithDebt, 1);
+    expect(s.byCategory.map((c) => c.category), <String>['Autre'], reason: 'les achats fournisseurs ne comptent pas dans les catégories de créances');
   });
 }

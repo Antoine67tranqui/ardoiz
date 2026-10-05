@@ -156,7 +156,7 @@ class AppDatabase {
   void clearAllData() {
     _ensureOpen();
     write((db) {
-      for (final table in const ['outbox', 'payments', 'debts', 'customers', 'meta']) {
+      for (final table in const ['outbox', 'payments', 'debts', 'customers', 'cash_entries', 'meta']) {
         db.execute('DELETE FROM $table');
       }
     });

@@ -13,7 +13,10 @@ import '../../widgets/common.dart';
 
 /// Liste des clients : total à encaisser, recherche, filtre « en retard », tri.
 class CustomersScreen extends ConsumerStatefulWidget {
-  const CustomersScreen({super.key});
+  const CustomersScreen({super.key, this.kind = PartyKind.client});
+
+  /// Clients (ce qu'on me doit) ou fournisseurs (ce que je dois).
+  final PartyKind kind;
 
   @override
   ConsumerState<CustomersScreen> createState() => _CustomersScreenState();
@@ -33,10 +36,11 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final customers = ref.watch(customersProvider);
+    final customers = ref.watch(partiesProvider(widget.kind));
+    final supplier = widget.kind == PartyKind.supplier;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Clients'),
+        title: Text(supplier ? 'Fournisseurs' : 'Clients'),
         actions: <Widget>[
           PopupMenuButton<CustomerSort>(
             tooltip: 'Trier les clients',
@@ -51,9 +55,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(Routes.customerNew),
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Nouveau client'),
+        onPressed: () => context.push(supplier ? Routes.supplierNew : Routes.customerNew),
+        icon: Icon(supplier ? Icons.local_shipping_outlined : Icons.person_add_alt_1),
+        label: Text(supplier ? 'Nouveau fournisseur' : 'Nouveau client'),
       ),
       body: customers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -68,7 +72,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   }
 
   Widget _buildList(List<CustomerView> all) {
-    if (all.isEmpty) return const _FirstCustomerState();
+    if (all.isEmpty) return _FirstCustomerState(kind: widget.kind);
 
     final shown = filterCustomers(all, query: _query, overdueOnly: _overdueOnly, sort: _sort);
     final overdueCount = all.where((c) => c.hasOverdue).length;
@@ -80,13 +84,13 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: <Widget>[
-          _TotalCard(total: total, customerCount: all.length),
+          _TotalCard(total: total, customerCount: all.length, kind: widget.kind),
           const SizedBox(height: 12),
           TextField(
             controller: _search,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              hintText: 'Rechercher un nom ou un numéro',
+              hintText: widget.kind == PartyKind.supplier ? 'Rechercher un fournisseur' : 'Rechercher un nom ou un numéro',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _query.isEmpty
                   ? null
@@ -117,9 +121,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
               padding: const EdgeInsets.only(top: 48),
               child: EmptyState(
                 icon: Icons.search_off,
-                title: 'Aucun client trouvé',
+                title: widget.kind == PartyKind.supplier ? 'Aucun fournisseur trouvé' : 'Aucun client trouvé',
                 message: _overdueOnly && _query.isEmpty
-                    ? 'Aucun client n\'a de dette en retard. Bonne nouvelle !'
+                    ? (widget.kind == PartyKind.supplier ? 'Aucune dette fournisseur n\'est en retard.' : 'Aucun client n\'a de dette en retard. Bonne nouvelle !')
                     : 'Essayez un autre nom ou un autre numéro.',
               ),
             )
@@ -132,18 +136,22 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
 }
 
 class _TotalCard extends StatelessWidget {
-  const _TotalCard({required this.total, required this.customerCount});
+  const _TotalCard({required this.total, required this.customerCount, required this.kind});
 
   final Money total;
   final int customerCount;
+  final PartyKind kind;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final supplier = kind == PartyKind.supplier;
+    final noun = supplier ? 'fournisseur' : 'client';
+    final title = supplier ? 'Total à payer' : 'Total à encaisser';
     return Semantics(
       container: true,
-      label: 'Total à encaisser : ${formatMoney(total)}, $customerCount client${customerCount > 1 ? 's' : ''}',
+      label: '$title : ${formatMoney(total)}, $customerCount $noun${customerCount > 1 ? 's' : ''}',
       child: ExcludeSemantics(
         child: Card(
           color: scheme.primary,
@@ -152,7 +160,7 @@ class _TotalCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Total à encaisser', style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimary.withValues(alpha: 0.85))),
+                Text(title, style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimary.withValues(alpha: 0.85))),
                 const SizedBox(height: 4),
                 MoneyText(
                   total,
@@ -161,7 +169,7 @@ class _TotalCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$customerCount client${customerCount > 1 ? 's' : ''}',
+                  '$customerCount $noun${customerCount > 1 ? 's' : ''}',
                   style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onPrimary.withValues(alpha: 0.85)),
                 ),
               ],
@@ -255,18 +263,35 @@ class CustomerTile extends StatelessWidget {
 }
 
 class _FirstCustomerState extends StatelessWidget {
-  const _FirstCustomerState();
+  const _FirstCustomerState({required this.kind});
+
+  final PartyKind kind;
 
   @override
-  Widget build(BuildContext context) => EmptyState(
-        icon: Icons.menu_book_outlined,
-        title: 'Votre carnet est vide',
-        message: 'Ajoutez votre premier client, puis notez ce qu\'il vous doit. '
-            'Tout fonctionne sans connexion et se synchronise dès que le réseau revient.',
+  Widget build(BuildContext context) {
+    if (kind == PartyKind.supplier) {
+      return EmptyState(
+        icon: Icons.local_shipping_outlined,
+        title: 'Aucun fournisseur',
+        message: 'Notez ici ce que vous devez à vos fournisseurs (achats à crédit) pour ne rien oublier de payer. '
+            'Tout fonctionne sans connexion.',
         action: BusyButton(
-          label: 'Ajouter mon premier client',
-          icon: Icons.person_add_alt_1,
-          onPressed: () => context.push(Routes.customerNew),
+          label: 'Ajouter mon premier fournisseur',
+          icon: Icons.local_shipping_outlined,
+          onPressed: () => context.push(Routes.supplierNew),
         ),
       );
+    }
+    return EmptyState(
+      icon: Icons.menu_book_outlined,
+      title: 'Votre carnet est vide',
+      message: 'Ajoutez votre premier client, puis notez ce qu\'il vous doit. '
+          'Tout fonctionne sans connexion et se synchronise dès que le réseau revient.',
+      action: BusyButton(
+        label: 'Ajouter mon premier client',
+        icon: Icons.person_add_alt_1,
+        onPressed: () => context.push(Routes.customerNew),
+      ),
+    );
+  }
 }

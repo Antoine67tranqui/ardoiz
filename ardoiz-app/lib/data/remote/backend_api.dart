@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../core/money.dart';
 import '../../domain/dashboard.dart';
+import '../../domain/treasury.dart';
 import 'api_client.dart';
 import 'api_exceptions.dart';
 
@@ -14,6 +15,8 @@ class Profile {
     required this.businessName,
     required this.plan,
     this.planExpiresAt,
+    this.termsAccepted = true,
+    this.termsVersion,
   });
 
   final String id;
@@ -21,6 +24,12 @@ class Profile {
   final String businessName;
   final Plan plan;
   final DateTime? planExpiresAt;
+
+  /// Faux quand une nouvelle version des conditions attend l'acceptation de l'utilisateur.
+  final bool termsAccepted;
+
+  /// Version des conditions en vigueur sur le serveur.
+  final String? termsVersion;
 
   bool get isPremium => plan == Plan.premium;
 
@@ -58,6 +67,27 @@ class UpgradeResult {
   final bool simulated;
   final String message;
   final String? reference;
+}
+
+/// Un événement du journal d'activité du compte.
+class ActivityEvent {
+  const ActivityEvent({required this.action, required this.at});
+
+  final String action;
+  final DateTime at;
+
+  /// Libellé lisible (les codes d'action du serveur ne sont jamais affichés tels quels).
+  String get label => switch (action) {
+        'ACCOUNT_CREATED' => 'Compte créé',
+        'LOGIN' => 'Connexion',
+        'PIN_LOCKED' => 'Compte verrouillé après plusieurs codes PIN erronés',
+        'PIN_CHANGED' => 'Code PIN modifié',
+        'LOGOUT' => 'Déconnexion',
+        'CONSENT_ACCEPTED' => 'Conditions et confidentialité acceptées',
+        'DATA_EXPORT' => 'Export de vos données',
+        'CUSTOMER_EXPORT' => 'Export des données d\'un client ou fournisseur',
+        _ => 'Activité du compte',
+      };
 }
 
 class OtpRequestResult {
@@ -158,6 +188,7 @@ abstract interface class BackendApi {
     required String otpSessionToken,
     required String businessName,
     required String pin,
+    required String termsVersion,
   });
   Future<SessionTokens> login({required String phone, required String pin});
   Future<void> logout();
@@ -167,6 +198,21 @@ abstract interface class BackendApi {
   Future<void> deleteAccount({required String pin});
   Future<Profile> profile();
   Future<Profile> updateBusinessName(String businessName);
+
+  /// Accepte la version en vigueur des conditions (re-consentement).
+  Future<void> acceptTerms(String termsVersion);
+
+  /// Journal d'activité du compte (100 derniers événements).
+  Future<List<ActivityEvent>> activity();
+
+  /// Droit d'accès et de portabilité : copie JSON de toutes les données du compte.
+  Future<DownloadedFile> exportMyData();
+
+  /// Données d'un seul client ou fournisseur (demande d'accès de cette personne).
+  Future<DownloadedFile> exportPartyData(String customerId, {required String fileName});
+
+  /// Synthèse de caisse du serveur (sert à vérifier le calcul local).
+  Future<TreasurySummary> cashSummary({required DateTime from, required DateTime to});
   Future<SubscriptionStatus> subscriptionStatus();
   Future<UpgradeResult> upgrade();
   Future<DashboardSummary> dashboard();
@@ -211,11 +257,13 @@ class HttpBackendApi implements BackendApi {
     required String otpSessionToken,
     required String businessName,
     required String pin,
+    required String termsVersion,
   }) async {
     final json = await _map(_client.send('POST', '/auth/pin/setup', body: <String, Object?>{
       'otpSessionToken': otpSessionToken,
       'businessName': businessName,
       'pin': pin,
+      'termsVersion': termsVersion,
     }));
     return _tokens(json);
   }
@@ -243,6 +291,56 @@ class HttpBackendApi implements BackendApi {
   @override
   Future<Profile> updateBusinessName(String businessName) async =>
       _profile(await _map(_client.send('PATCH', '/auth/me', body: <String, Object?>{'businessName': businessName})));
+
+  // ---- Vie privée et données ----
+
+  @override
+  Future<void> acceptTerms(String termsVersion) =>
+      _client.send('POST', '/auth/consent', body: <String, Object?>{'termsVersion': termsVersion});
+
+  @override
+  Future<List<ActivityEvent>> activity() async {
+    final list = await _list(_client.send('GET', '/auth/activity'));
+    return _parse(() => list
+        .map((e) => e! as Map<String, Object?>)
+        .map((e) => ActivityEvent(action: e['action']! as String, at: DateTime.parse(e['createdAt']! as String)))
+        .toList());
+  }
+
+  @override
+  Future<DownloadedFile> exportMyData() async {
+    final data = await _client.send('GET', '/auth/export', responseType: ResponseType.bytes);
+    if (data is! List<int>) throw const ServerException(200, 'Réponse d\'export invalide.');
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    return DownloadedFile(fileName: 'carne-mes-donnees-$today.json', bytes: data);
+  }
+
+  @override
+  Future<DownloadedFile> exportPartyData(String customerId, {required String fileName}) async {
+    final data = await _client.send('GET', '/auth/export/customers/$customerId', responseType: ResponseType.bytes);
+    if (data is! List<int>) throw const ServerException(200, 'Réponse d\'export invalide.');
+    return DownloadedFile(fileName: fileName, bytes: data);
+  }
+
+  @override
+  Future<TreasurySummary> cashSummary({required DateTime from, required DateTime to}) async {
+    final json = await _map(_client.send('GET', '/cash/summary', query: <String, Object?>{
+      'from': from.toUtc().toIso8601String(),
+      'to': to.toUtc().toIso8601String(),
+    }));
+    return _parse(() => TreasurySummary(
+          sales: Money.fromJson(json['sales']! as num),
+          collected: Money.fromJson(json['collected']! as num),
+          expenses: Money.fromJson(json['expenses']! as num),
+          paidToSuppliers: Money.fromJson(json['paidToSuppliers']! as num),
+          creditGranted: Money.fromJson(json['creditGranted']! as num),
+          creditReceived: Money.fromJson(json['creditReceived']! as num),
+          expensesByCategory: (json['expensesByCategory']! as List<Object?>)
+              .map((e) => e! as Map<String, Object?>)
+              .map((e) => ExpenseCategoryTotal(category: e['category']! as String, total: Money.fromJson(e['total']! as num)))
+              .toList(),
+        ));
+  }
 
   // ---- Abonnement ----
 
@@ -280,6 +378,9 @@ class HttpBackendApi implements BackendApi {
           totalCustomers: json['totalCustomers']! as int,
           customersWithDebt: json['customersWithDebt']! as int,
           recoveryRate: (json['recoveryRate'] as num?)?.toDouble(),
+          totalPayable: Money.fromJson((json['totalPayable'] as num?) ?? 0),
+          payableOverdue: Money.fromJson((json['payableOverdue'] as num?) ?? 0),
+          suppliersWithDebt: (json['suppliersWithDebt'] as int?) ?? 0,
           byCategory: (json['byCategory']! as List<Object?>)
               .map((e) => e! as Map<String, Object?>)
               .map((e) => CategoryBreakdown(
@@ -411,6 +512,8 @@ class HttpBackendApi implements BackendApi {
         businessName: json['businessName']! as String,
         plan: json['plan'] == 'PREMIUM' ? Plan.premium : Plan.free,
         planExpiresAt: _date(json['planExpiresAt']),
+        termsAccepted: json['termsAccepted'] as bool? ?? true,
+        termsVersion: json['termsVersion'] as String?,
       ));
 
   static ReminderRule _rule(Map<String, Object?> json) => ReminderRule(

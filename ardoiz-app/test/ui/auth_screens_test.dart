@@ -54,6 +54,13 @@ void main() {
 
   Finder field(String key) => find.byKey(Key(key));
 
+  /// Fait défiler jusqu'au widget avant de le toucher (les écrans d'accès défilent).
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+  }
+
   group('accueil', () {
     testWidgets('présente la marque et mène à l\'inscription ou à la connexion', (tester) async {
       await pump(tester, initial: '/welcome', screens: {'/welcome': (_) => const WelcomeScreen()});
@@ -348,21 +355,21 @@ void main() {
     testWidgets('refuse un PIN de confirmation différent, un PIN court et un nom vide', (tester) async {
       await pumpPin(tester);
 
-      await tester.tap(find.text('Créer mon compte'));
+      await tapVisible(tester, find.text('Créer mon compte'));
       await tester.pumpAndSettle();
       expect(find.text('Saisissez le nom de votre boutique.'), findsOneWidget);
 
       await tester.enterText(field('business'), 'Boutique Awa');
       await tester.enterText(field('pin'), '1234');
       await tester.enterText(field('confirm'), '4321');
-      await tester.tap(find.text('Créer mon compte'));
+      await tapVisible(tester, find.text('Créer mon compte'));
       await tester.pumpAndSettle();
       expect(find.text('Les deux codes PIN ne correspondent pas.'), findsOneWidget);
-      verifyNever(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin')));
+      verifyNever(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin'), termsVersion: any(named: 'termsVersion')));
     });
 
     testWidgets('crée le compte : envoie le jeton OTP, le nom nettoyé et le PIN, ouvre la session, réinitialise le parcours', (tester) async {
-      when(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin')))
+      when(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin'), termsVersion: any(named: 'termsVersion')))
           .thenAnswer((_) async => const SessionTokens(accessToken: 'a', refreshToken: 'r'));
       when(() => env.api.profile()).thenAnswer((_) async => testProfile);
       await pumpPin(tester);
@@ -370,12 +377,38 @@ void main() {
       await tester.enterText(field('business'), '  Boutique Awa  ');
       await tester.enterText(field('pin'), '4321');
       await tester.enterText(field('confirm'), '4321');
-      await tester.tap(find.text('Créer mon compte'));
+      await tapVisible(tester, find.byKey(const Key('consent')));
+      await tapVisible(tester, find.text('Créer mon compte'));
       await tester.pumpAndSettle();
 
-      verify(() => env.api.setupPin(otpSessionToken: 'tok', businessName: 'Boutique Awa', pin: '4321')).called(1);
+      verify(() => env.api.setupPin(otpSessionToken: 'tok', businessName: 'Boutique Awa', pin: '4321', termsVersion: any(named: 'termsVersion'))).called(1);
       expect(container.read(sessionProvider), isA<SignedIn>());
       expect(container.read(signupFlowProvider).phone, isNull);
+    });
+
+    testWidgets('sans consentement explicite, aucun compte n\'est créé (case jamais cochée d\'avance)', (tester) async {
+      await pumpPin(tester);
+      expect(tester.widget<CheckboxListTile>(find.byKey(const Key('consent'))).value, isFalse);
+
+      await tester.enterText(field('business'), 'Boutique Awa');
+      await tester.enterText(field('pin'), '4321');
+      await tester.enterText(field('confirm'), '4321');
+      await tapVisible(tester, find.text('Créer mon compte'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vous devez accepter pour continuer.'), findsOneWidget);
+      verifyNever(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin'), termsVersion: any(named: 'termsVersion')));
+    });
+
+    testWidgets('le résumé « ce que Carné fait de mes données » est lisible dans l\'application', (tester) async {
+      await pumpPin(tester);
+      await tester.ensureVisible(find.text('Voir ce que Carné fait de mes données'));
+      await tester.tap(find.text('Voir ce que Carné fait de mes données'));
+      await tester.pumpAndSettle();
+      expect(find.text('Vos données et Carné'), findsOneWidget);
+      expect(find.textContaining('empreinte de votre code PIN'), findsOneWidget);
+      await tester.scrollUntilVisible(find.textContaining('supprimer votre compte'), 100, scrollable: find.byType(Scrollable).last);
+      expect(find.textContaining('supprimer votre compte'), findsOneWidget);
     });
 
     testWidgets('PIN oublié (compte existant) : libellés de réinitialisation', (tester) async {
@@ -392,14 +425,15 @@ void main() {
     });
 
     testWidgets('session OTP expirée : erreur claire, bouton de nouveau disponible', (tester) async {
-      when(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin')))
+      when(() => env.api.setupPin(otpSessionToken: any(named: 'otpSessionToken'), businessName: any(named: 'businessName'), pin: any(named: 'pin'), termsVersion: any(named: 'termsVersion')))
           .thenThrow(const UnauthorizedException('Session OTP invalide ou expiree'));
       await pumpPin(tester);
 
       await tester.enterText(field('business'), 'Boutique Awa');
       await tester.enterText(field('pin'), '4321');
       await tester.enterText(field('confirm'), '4321');
-      await tester.tap(find.text('Créer mon compte'));
+      await tapVisible(tester, find.byKey(const Key('consent')));
+      await tapVisible(tester, find.text('Créer mon compte'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Session OTP invalide'), findsOneWidget);

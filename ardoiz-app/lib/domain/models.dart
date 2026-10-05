@@ -15,6 +15,39 @@ enum PaymentMethod {
       PaymentMethod.values.firstWhere((m) => m.wire == value, orElse: () => PaymentMethod.cash);
 }
 
+/// Nature d'un tiers : un client me doit de l'argent, je dois de l'argent à un fournisseur.
+enum PartyKind {
+  client('CLIENT'),
+  supplier('SUPPLIER');
+
+  const PartyKind(this.wire);
+  final String wire;
+
+  static PartyKind fromWire(String? value) => value == 'SUPPLIER' ? PartyKind.supplier : PartyKind.client;
+}
+
+/// Écriture du journal de caisse : vente au comptant ou dépense.
+enum CashType {
+  sale('SALE', 'Vente'),
+  expense('EXPENSE', 'Dépense');
+
+  const CashType(this.wire, this.label);
+  final String wire;
+  final String label;
+
+  static CashType fromWire(String value) => value == 'EXPENSE' ? CashType.expense : CashType.sale;
+}
+
+/// Catégories proposées pour les dépenses (le serveur accepte tout texte ≤ 50 car.).
+const List<String> defaultExpenseCategories = <String>[
+  'Achat de marchandises',
+  'Transport',
+  'Loyer',
+  'Électricité et eau',
+  'Salaires',
+  'Autre',
+];
+
 /// Statut d'une dette, toujours déduit des paiements (jamais stocké).
 enum DebtStatus { pending, partial, paid }
 
@@ -36,6 +69,8 @@ class Customer {
     required this.phone,
     required this.createdAt,
     this.creditLimit,
+    this.kind = PartyKind.client,
+    this.reminderOptOut = false,
   });
 
   final String id;
@@ -44,13 +79,49 @@ class Customer {
   final Money? creditLimit;
   final DateTime createdAt;
 
-  Customer copyWith({String? name, String? phone, Money? creditLimit, bool clearCreditLimit = false}) => Customer(
+  /// Client (il me doit) ou fournisseur (je lui dois). Ne change jamais.
+  final PartyKind kind;
+
+  /// La personne s'oppose aux relances : aucune ne lui est envoyée.
+  final bool reminderOptOut;
+
+  bool get isSupplier => kind == PartyKind.supplier;
+
+  Customer copyWith({
+    String? name,
+    String? phone,
+    Money? creditLimit,
+    bool clearCreditLimit = false,
+    bool? reminderOptOut,
+  }) =>
+      Customer(
         id: id,
         name: name ?? this.name,
         phone: phone ?? this.phone,
         creditLimit: clearCreditLimit ? null : (creditLimit ?? this.creditLimit),
         createdAt: createdAt,
+        kind: kind,
+        reminderOptOut: reminderOptOut ?? this.reminderOptOut,
       );
+}
+
+@immutable
+class CashEntry {
+  const CashEntry({
+    required this.id,
+    required this.type,
+    required this.amount,
+    required this.category,
+    required this.occurredAt,
+    this.label,
+  });
+
+  final String id;
+  final CashType type;
+  final Money amount;
+  final String? label;
+  final String category;
+  final DateTime occurredAt;
 }
 
 @immutable

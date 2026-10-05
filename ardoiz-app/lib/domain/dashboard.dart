@@ -76,6 +76,9 @@ class DashboardSummary {
     required this.atRisk,
     required this.trend,
     this.recoveryRate,
+    this.totalPayable = Money.zero,
+    this.payableOverdue = Money.zero,
+    this.suppliersWithDebt = 0,
   });
 
   final Money totalOutstanding;
@@ -88,6 +91,11 @@ class DashboardSummary {
 
   /// Part des dettes soldées payées à temps (0 à 1), null si aucune dette soldée.
   final double? recoveryRate;
+
+  /// Ce que je dois aux fournisseurs (reste à payer), dont la part déjà échue.
+  final Money totalPayable;
+  final Money payableOverdue;
+  final int suppliersWithDebt;
 }
 
 /// Tableau de bord calculé sur l'appareil à partir du carnet local : disponible
@@ -98,7 +106,23 @@ class DashboardCalculator {
 
   static const int trendMonths = 6;
 
-  static DashboardSummary compute(List<CustomerView> customers, DateTime now) {
+  static DashboardSummary compute(List<CustomerView> allParties, DateTime now) {
+    // Les indicateurs portent sur les CLIENTS (ce qu'on me doit) ; ce que je
+    // dois aux fournisseurs est totalisé à part.
+    final customers = allParties.where((c) => !c.customer.isSupplier).toList();
+    var payable = Money.zero;
+    var payableOverdue = Money.zero;
+    final suppliersWithDebt = <String>{};
+    for (final supplier in allParties.where((c) => c.customer.isSupplier)) {
+      for (final view in supplier.debts) {
+        if (!view.remaining.isPositive) continue;
+        payable += view.remaining;
+        suppliersWithDebt.add(supplier.customer.id);
+        final due = view.debt.dueDate;
+        if (due != null && due.isBefore(now)) payableOverdue += view.remaining;
+      }
+    }
+
     var total = Money.zero;
     final withDebt = <String>{};
     final categories = <String, ({Money outstanding, int count})>{};
@@ -168,6 +192,9 @@ class DashboardCalculator {
       atRisk: atRisk,
       trend: _trend(customers, now),
       recoveryRate: paidDebts == 0 ? null : paidOnTime / paidDebts,
+      totalPayable: payable,
+      payableOverdue: payableOverdue,
+      suppliersWithDebt: suppliersWithDebt.length,
     );
   }
 

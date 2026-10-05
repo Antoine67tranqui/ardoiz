@@ -29,6 +29,12 @@ class WelcomeScreen extends StatelessWidget {
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall,
         ),
+        const SizedBox(height: 4),
+        Text(
+          'Un produit de ${Brand.publisher}',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
       ],
     );
   }

@@ -45,6 +45,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
     final colors = context.statusColors;
     final debt = view.debt;
     final settled = view.status == DebtStatus.paid;
+    final supplier = customer?.customer.isSupplier ?? false;
     final progress = debt.amount.cents == 0 ? 0.0 : (view.paid.cents / debt.amount.cents).clamp(0.0, 1.0);
 
     return Scaffold(
@@ -92,7 +93,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
                       if (view.pendingSync) const PendingSyncIcon(size: 20),
                     ]),
                     const SizedBox(height: 12),
-                    Text(settled ? 'Montant payé' : 'Reste à payer', style: theme.textTheme.labelLarge),
+                    Text(settled ? 'Montant payé' : (supplier ? 'Reste à payer au fournisseur' : 'Reste à payer'), style: theme.textTheme.labelLarge),
                     MoneyText(
                       settled ? debt.amount : view.remaining,
                       color: settled ? colors.paid : null,
@@ -130,21 +131,24 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
               FilledButton.icon(
                 onPressed: _busy ? null : () => _addPayment(view),
                 icon: const Icon(Icons.payments_outlined),
-                label: const Text('Enregistrer un paiement'),
+                label: Text(supplier ? 'Payer ce fournisseur' : 'Enregistrer un paiement'),
               ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : () => _remind(view, customer),
-                icon: const Icon(Icons.notifications_active_outlined),
-                label: const Text('Relancer le client'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : () => _requestMomo(view),
-                icon: const Icon(Icons.phone_android),
-                label: const Text('Demander un paiement Mobile Money'),
-              ),
-              if (view.pendingSync)
+              // On ne relance pas un fournisseur et on ne lui demande pas de paiement : c'est nous qui devons.
+              if (!supplier) ...<Widget>[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _remind(view, customer),
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: const Text('Relancer le client'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _requestMomo(view),
+                  icon: const Icon(Icons.phone_android),
+                  label: const Text('Demander un paiement Mobile Money'),
+                ),
+              ],
+              if (view.pendingSync && !supplier)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
@@ -153,7 +157,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
                   ),
                 ),
             ],
-            const SectionTitle('Paiements reçus'),
+            SectionTitle(supplier ? 'Paiements faits' : 'Paiements reçus'),
             if (view.payments.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -196,7 +200,7 @@ class _DebtDetailScreenState extends ConsumerState<DebtDetailScreen> {
   }
 
   Future<void> _addPayment(DebtView view) async {
-    final saved = await showPaymentSheet(context, view);
+    final saved = await showPaymentSheet(context, view, toSupplier: ref.read(customerByIdProvider(view.debt.customerId))?.customer.isSupplier ?? false);
     if (!saved || !mounted) return;
     final after = ref.read(debtByIdProvider(view.debt.id));
     showSnack(context, after != null && after.status == DebtStatus.paid ? 'Dette soldée, bravo !' : 'Paiement enregistré');

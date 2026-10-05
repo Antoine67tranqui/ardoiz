@@ -70,6 +70,9 @@ class Validators {
   static String? reason(String? value) =>
       (value ?? '').trim().length > 500 ? 'Le motif est trop long (500 caractères maximum).' : null;
 
+  static String? cashLabel(String? value) =>
+      (value ?? '').trim().length > 200 ? 'Le libellé est trop long (200 caractères maximum).' : null;
+
   static String? category(String? value) {
     final v = value?.trim() ?? '';
     if (v.isEmpty) return 'Choisissez une catégorie.';

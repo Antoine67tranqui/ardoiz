@@ -11,11 +11,14 @@ class Routes {
 
   // Onglets
   static const String customers = '/home/customers';
+  static const String suppliers = '/home/suppliers';
+  static const String cash = '/home/cash';
   static const String dashboard = '/home/dashboard';
   static const String settings = '/home/settings';
 
   // Clients et dettes
   static const String customerNew = '/customers/new';
+  static const String supplierNew = '/suppliers/new';
   static String customer(String id) => '/customers/$id';
   static String customerEdit(String id) => '/customers/$id/edit';
   static String debtNew(String customerId) => '/customers/$customerId/debts/new';
@@ -28,6 +31,8 @@ class Routes {
   static const String changePin = '/settings/pin';
   static const String businessName = '/settings/business';
   static const String deleteAccount = '/settings/delete-account';
+  static const String activity = '/settings/activity';
+  static const String consent = '/consent';
   static const String syncIssues = '/settings/sync';
 
   static const Set<String> publicPaths = <String>{welcome, login, signup, signupCode, signupPin};

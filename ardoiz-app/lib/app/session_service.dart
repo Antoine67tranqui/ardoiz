@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../core/legal.dart';
 import '../data/local/app_database.dart';
 import '../data/local/ledger_store.dart';
 import '../data/local/outbox_store.dart';
@@ -14,6 +15,12 @@ enum SignedOutReason { none, expired, loggedOut }
 
 sealed class SessionState {
   const SessionState();
+
+  /// Valeur tirée du profil si une session est ouverte, sinon null.
+  T? whenSignedIn<T>(T Function(Profile profile) pick) => switch (this) {
+        SignedIn(:final profile) => pick(profile),
+        SignedOut() => null,
+      };
 }
 
 /// Aucun jeton. [phone] est renseigné quand des données locales du commerçant
@@ -120,7 +127,12 @@ class SessionService {
     required String pin,
     bool discardUnsyncedFromOtherAccount = false,
   }) async {
-    final session = await api.setupPin(otpSessionToken: otpSessionToken, businessName: businessName, pin: pin);
+    final session = await api.setupPin(
+      otpSessionToken: otpSessionToken,
+      businessName: businessName,
+      pin: pin,
+      termsVersion: Legal.termsVersion,
+    );
     return _establish(session, discard: discardUnsyncedFromOtherAccount);
   }
 

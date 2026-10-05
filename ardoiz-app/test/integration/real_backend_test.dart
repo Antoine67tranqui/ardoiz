@@ -1,11 +1,15 @@
 // Test d'intégration : l'app (base chiffrée, dépôt, moteur de synchronisation,
 // client HTTP) contre le VRAI backend. Exécuté seulement si CARNE_BACKEND_URL
-// est défini (ex. http://localhost:3998/api/v1), backend lancé hors production.
+// est défini (ex. http://localhost:3998/api/v1), backend lancé hors production
+// avec TRUST_PROXY=1.
 import 'dart:io';
 import 'dart:math';
 
+import 'package:ardoiz/core/legal.dart';
 import 'package:ardoiz/core/money.dart';
 import 'package:ardoiz/domain/dashboard.dart';
+import 'package:ardoiz/domain/models.dart';
+import 'package:ardoiz/domain/treasury.dart';
 import 'package:ardoiz/data/local/app_database.dart';
 import 'package:ardoiz/data/local/ledger_store.dart';
 import 'package:ardoiz/data/local/outbox_store.dart';
@@ -17,6 +21,7 @@ import 'package:ardoiz/data/remote/token_store.dart';
 import 'package:ardoiz/data/repositories/ledger_repository.dart';
 import 'package:ardoiz/data/sync/ledger_transport.dart';
 import 'package:ardoiz/data/sync/sync_engine.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/harness.dart';
@@ -71,8 +76,13 @@ String uniquePhone() {
   return '+2290167$n';
 }
 
-ApiClient newClient(TokenStore tokens, {void Function()? onExpired}) =>
-    ApiClient(baseUrl: backendUrl!, tokens: tokens, onSessionExpired: onExpired);
+/// Chaque client simule un appareil à part (adresse IP distincte) : le serveur de test tourne avec
+/// TRUST_PROXY=1, sinon tous les appareils partageraient les limites de débit d'une seule IP.
+ApiClient newClient(TokenStore tokens, {void Function()? onExpired}) {
+  final ip = '10.${Random().nextInt(250) + 1}.${Random().nextInt(250) + 1}.${Random().nextInt(250) + 1}';
+  Dio device() => Dio(BaseOptions(headers: <String, Object?>{'X-Forwarded-For': ip}));
+  return ApiClient(baseUrl: backendUrl!, tokens: tokens, onSessionExpired: onExpired, dio: device(), refreshDio: device());
+}
 
 /// Inscrit un nouveau commerçant (OTP → PIN) et renvoie son identité.
 Future<({String phone, String pin, TokenStore tokens, ApiClient client, BackendApi api})> signUp({String businessName = 'Boutique Test'}) async {
@@ -84,7 +94,7 @@ Future<({String phone, String pin, TokenStore tokens, ApiClient client, BackendA
   expect(otp.devCode, isNotNull, reason: 'le backend de test doit tourner hors production');
   final verification = await api.verifyOtp(phone, otp.devCode!);
   expect(verification.isNewUser, isTrue);
-  final session = await api.setupPin(otpSessionToken: verification.otpSessionToken, businessName: businessName, pin: '1234');
+  final session = await api.setupPin(otpSessionToken: verification.otpSessionToken, businessName: businessName, pin: '1234', termsVersion: Legal.termsVersion);
   await tokens.save(accessToken: session.accessToken, refreshToken: session.refreshToken);
   return (phone: phone, pin: '1234', tokens: tokens, client: client, api: api);
 }
@@ -367,6 +377,89 @@ void main() {
       HttpBackendApi(newClient(TokenStore(InMemorySecretStore()))).login(phone: owner.phone, pin: '1234'),
       throwsA(isA<RejectedException>().having((e) => e.statusCode, 'status', 401)),
     );
+  });
+
+  test('fournisseurs et caisse : même état sur un second appareil, et la trésorerie locale égale celle du serveur', skip: skip, () async {
+    final owner = await signUp();
+    final a = RealDevice(owner.client, owner.tokens);
+    final now = DateTime.now();
+
+    final client = a.repo.addCustomer(name: 'Aïcha', phone: customerPhone, reminderOptOut: true);
+    final supplier = a.repo.addCustomer(name: 'Grossiste', phone: customerPhone, kind: PartyKind.supplier);
+    final clientDebt = a.repo.addDebt(customerId: client.id, amount: fcfa(5000));
+    final supplierDebt = a.repo.addDebt(customerId: supplier.id, amount: fcfa(9000), dueDate: now.subtract(const Duration(days: 2)));
+    a.repo.addPayment(debtId: clientDebt.id, amount: fcfa(2000));
+    a.repo.addPayment(debtId: supplierDebt.id, amount: fcfa(3000));
+    a.repo.addCashEntry(type: CashType.sale, amount: fcfa(10000), label: 'Ventes du jour', category: 'Alimentation');
+    final taxi = a.repo.addCashEntry(type: CashType.expense, amount: fcfa(1500), category: 'Transport');
+    a.repo.addCashEntry(type: CashType.expense, amount: fcfa(500), category: 'Loyer');
+    await a.sync();
+    expect(a.outbox.count(), 0);
+
+    // Un second appareil retrouve fournisseurs, opposition et caisse à l'identique.
+    final b = await secondDevice(owner.phone, owner.pin);
+    await b.sync();
+    expect(b.ledger.customer(supplier.id)!.kind, PartyKind.supplier);
+    expect(b.ledger.customer(client.id)!.reminderOptOut, isTrue);
+    expect(b.repo.cashEntries().map((e) => e.id).toSet(), a.repo.cashEntries().map((e) => e.id).toSet());
+
+    // Modification et suppression de caisse depuis l'appareil 2.
+    b.repo.updateCashEntry(taxi.id, amount: fcfa(1800), clearLabel: true);
+    await b.sync();
+    await a.sync();
+    expect(a.ledger.cashEntry(taxi.id)!.amount, fcfa(1800));
+
+    // Parité : la trésorerie calculée sur l'appareil = celle du serveur, au centime.
+    final from = DateTime(now.year, now.month);
+    final to = DateTime(now.year, now.month + 1);
+    final server = await owner.api.cashSummary(from: from, to: to);
+    final local = TreasuryCalculator.compute(customers: a.repo.customers(), cashEntries: a.repo.cashEntries(), from: from, to: to);
+    expect(local.sales, server.sales);
+    expect(local.collected, server.collected);
+    expect(local.expenses, server.expenses);
+    expect(local.paidToSuppliers, server.paidToSuppliers);
+    expect(local.creditGranted, server.creditGranted);
+    expect(local.creditReceived, server.creditReceived);
+    expect({for (final c in local.expensesByCategory) c.category: c.total}, {for (final c in server.expensesByCategory) c.category: c.total});
+    expect(local.net, server.net);
+
+    // Parité du tableau de bord (Premium) avec les fournisseurs.
+    await owner.api.upgrade();
+    final dash = await owner.api.dashboard();
+    final localDash = DashboardCalculator.compute(a.repo.customers(), DateTime.now());
+    expect(localDash.totalPayable, dash.totalPayable);
+    expect(localDash.payableOverdue, dash.payableOverdue);
+    expect(localDash.suppliersWithDebt, dash.suppliersWithDebt);
+    expect(localDash.totalOutstanding, dash.totalOutstanding);
+    expect(localDash.totalCustomers, dash.totalCustomers);
+  });
+
+  test('consentement, journal d\'activité, export des données', skip: skip, () async {
+    final owner = await signUp();
+    final profile = await owner.api.profile();
+    expect(profile.termsAccepted, isTrue);
+    expect(profile.termsVersion, Legal.termsVersion);
+
+    final activity = await owner.api.activity();
+    expect(activity.map((e) => e.action), containsAll(<String>['ACCOUNT_CREATED', 'CONSENT_ACCEPTED']));
+
+    final a = RealDevice(owner.client, owner.tokens);
+    final customer = a.repo.addCustomer(name: 'Aïcha Traoré', phone: customerPhone);
+    await a.sync();
+
+    final all = await owner.api.exportMyData();
+    final json = String.fromCharCodes(all.bytes);
+    expect(json, contains('Aïcha Traoré'.runes.every((r) => r < 128) ? 'Aïcha Traoré' : 'carne-export-v1'));
+    expect(json, contains('carne-export-v1'));
+    expect(json, isNot(contains('pinHash')));
+
+    final one = await owner.api.exportPartyData(customer.id, fileName: 'x.json');
+    expect(String.fromCharCodes(one.bytes), contains('carne-customer-export-v1'));
+    await expectLater(owner.api.exportPartyData('00000000-0000-4000-8000-000000000000', fileName: 'x.json'), throwsA(isA<RejectedException>().having((e) => e.statusCode, 'status', 404)));
+
+    // Une version obsolète des conditions est refusée côté serveur.
+    await expectLater(owner.api.acceptTerms('ancienne'), throwsA(isA<RejectedException>().having((e) => e.code, 'code', 'TERMS_VERSION_MISMATCH')));
+    await owner.api.acceptTerms(Legal.termsVersion); // idempotent
   });
 
   test('connexion par PIN, changement de PIN et révocation', skip: skip, () async {

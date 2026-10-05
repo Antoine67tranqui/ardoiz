@@ -39,7 +39,9 @@ class SyncReport {
 
 /// Messages affichés au commerçant pour les refus serveur les plus courants.
 String friendlyRejection(RejectedException error) => switch (error.code) {
-      'FREE_PLAN_LIMIT_REACHED' => 'Le plan gratuit est limité à 15 clients. Passez à Premium ou supprimez un client.',
+      'FREE_PLAN_LIMIT_REACHED' => error.message.contains('fournisseurs')
+          ? 'Le plan gratuit est limité à 15 fournisseurs. Passez à Premium ou supprimez un fournisseur.'
+          : 'Le plan gratuit est limité à 15 clients. Passez à Premium ou supprimez un client.',
       'OVERPAYMENT' => 'Le montant dépasse le solde restant de la dette sur le serveur.',
       'AMOUNT_BELOW_PAYMENTS' => 'Le montant est inférieur aux paiements déjà reçus sur le serveur.',
       _ => switch (error.statusCode) {
@@ -158,6 +160,7 @@ class SyncEngine {
       final localCustomers = _ledger.customers();
       final localDebts = _ledger.debts();
       final localPayments = _ledger.payments();
+      final localCash = _ledger.cashEntries();
 
       // Un parent est protégé dès qu'un de ses descendants l'est (supprimer le
       // parent ferait disparaître, en cascade, une saisie pas encore envoyée).
@@ -177,6 +180,7 @@ class SyncEngine {
       final serverCustomerIds = snapshot.customers.map((c) => c.id).toSet();
       final serverDebtIds = snapshot.debts.map((d) => d.id).toSet();
       final serverPaymentIds = snapshot.payments.map((p) => p.id).toSet();
+      final serverCashIds = snapshot.cashEntries.map((e) => e.id).toSet();
 
       // Suppressions : ce qui a disparu du serveur (supprimé ailleurs).
       for (final p in localPayments) {
@@ -187,6 +191,10 @@ class SyncEngine {
       }
       for (final c in localCustomers) {
         if (!serverCustomerIds.contains(c.id) && !protectedCustomers.contains(c.id)) _ledger.deleteCustomer(c.id);
+      }
+
+      for (final e in localCash) {
+        if (!serverCashIds.contains(e.id) && !protectedIds.contains(e.id)) _ledger.deleteCashEntry(e.id);
       }
 
       // Insertions / mises à jour, parents d'abord.
@@ -202,6 +210,10 @@ class SyncEngine {
         if (protectedIds.contains(payment.id)) continue;
         if (_ledger.debt(payment.debtId) == null) continue;
         _ledger.upsertPayment(payment);
+      }
+
+      for (final entry in snapshot.cashEntries) {
+        if (!protectedIds.contains(entry.id)) _ledger.upsertCashEntry(entry);
       }
 
       _ledger.setMeta(lastSyncMetaKey, snapshot.serverTime.toUtc().toIso8601String());

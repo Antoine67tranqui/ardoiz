@@ -60,4 +60,19 @@ const List<Migration> appMigrations = <Migration>[
     )''',
     'CREATE INDEX idx_outbox_entity ON outbox (entity_id)',
   ]),
+  // Version 2 : fournisseurs (kind), opposition aux relances, journal de caisse.
+  Migration(2, <String>[
+    "ALTER TABLE customers ADD COLUMN kind TEXT NOT NULL DEFAULT 'CLIENT'",
+    'ALTER TABLE customers ADD COLUMN reminder_opt_out INTEGER NOT NULL DEFAULT 0',
+    '''
+    CREATE TABLE cash_entries (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+      label TEXT,
+      category TEXT NOT NULL,
+      occurred_at TEXT NOT NULL
+    )''',
+    'CREATE INDEX idx_cash_occurred ON cash_entries (occurred_at)',
+  ]),
 ];

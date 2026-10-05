@@ -9,6 +9,7 @@ import '../../../app/signup_flow.dart';
 import '../../../core/validators.dart';
 import '../../widgets/auth_widgets.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy_widgets.dart';
 
 /// Étape 3 : nom de la boutique et code PIN (création, ou réinitialisation après
 /// un PIN oublié : le serveur révoque alors les sessions ouvertes sur d'autres appareils).
@@ -25,6 +26,8 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
   final _pin = TextEditingController();
   final _confirm = TextEditingController();
   bool _busy = false;
+  bool _consent = false;
+  bool _consentError = false;
   String? _error;
 
   @override
@@ -37,7 +40,11 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
 
   Future<void> _submit({bool discardUnsynced = false}) async {
     final token = ref.read(signupFlowProvider).otpSessionToken;
-    if (token == null || _busy || !(_formKey.currentState?.validate() ?? false)) return;
+    if (token == null || _busy) return;
+    final valid = _formKey.currentState?.validate() ?? false;
+    // Consentement explicite : sans lui, aucun compte n'est créé.
+    if (!_consent) setState(() => _consentError = true);
+    if (!valid || !_consent) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -120,6 +127,15 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen> {
                 validator: (value) => value != _pin.text ? 'Les deux codes PIN ne correspondent pas.' : Validators.pin(value),
                 textInputAction: TextInputAction.done,
                 onSubmitted: _submit,
+              ),
+              const SizedBox(height: 8),
+              ConsentCheckbox(
+                value: _consent,
+                onChanged: (v) => setState(() {
+                  _consent = v;
+                  if (v) _consentError = false;
+                }),
+                errorText: _consentError ? 'Vous devez accepter pour continuer.' : null,
               ),
               if (_error != null) ...<Widget>[const SizedBox(height: 16), FormErrorBanner(_error!)],
               const SizedBox(height: 24),

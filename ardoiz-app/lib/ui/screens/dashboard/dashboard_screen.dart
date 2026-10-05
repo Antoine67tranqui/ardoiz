@@ -92,7 +92,7 @@ class _Content extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (summary.totalCustomers == 0) {
+    if (summary.totalCustomers == 0 && summary.suppliersWithDebt == 0) {
       return const EmptyState(
         icon: Icons.insights_outlined,
         title: 'Rien à analyser pour le moment',
@@ -142,6 +142,18 @@ class _Content extends StatelessWidget {
             ),
           ],
         ),
+        if (summary.suppliersWithDebt > 0) ...<Widget>[
+          const SizedBox(height: 12),
+          _Kpi(
+            label: 'À payer aux fournisseurs',
+            value: formatMoney(summary.totalPayable),
+            icon: Icons.local_shipping_outlined,
+            alert: summary.payableOverdue.isPositive,
+            hint: summary.payableOverdue.isPositive
+                ? 'dont ${formatMoney(summary.payableOverdue)} déjà échu'
+                : '${summary.suppliersWithDebt} fournisseur${summary.suppliersWithDebt > 1 ? 's' : ''}',
+          ),
+        ],
         if (summary.atRisk.isNotEmpty) ...<Widget>[
           const SectionTitle('Clients à surveiller'),
           for (final risk in summary.atRisk.take(5)) _AtRiskTile(risk),

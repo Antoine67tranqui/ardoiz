@@ -143,9 +143,11 @@ class _DebtFormScreenState extends ConsumerState<DebtFormScreen> {
       }
     }
 
+    final partyId = _editing ? ref.watch(debtByIdProvider(widget.debtId!))?.debt.customerId : widget.customerId;
+    final supplier = partyId != null && (ref.watch(customerByIdProvider(partyId))?.customer.isSupplier ?? false);
     final categories = <String>{...defaultDebtCategories, _category}.toList();
     return Scaffold(
-      appBar: AppBar(title: Text(_editing ? 'Modifier la dette' : 'Nouvelle dette')),
+      appBar: AppBar(title: Text(_editing ? (supplier ? 'Modifier l\'achat' : 'Modifier la dette') : (supplier ? 'Nouvel achat à crédit' : 'Nouvelle dette'))),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -158,7 +160,7 @@ class _DebtFormScreenState extends ConsumerState<DebtFormScreen> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 textInputAction: TextInputAction.next,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                decoration: const InputDecoration(labelText: 'Montant', suffixText: 'FCFA'),
+                decoration: InputDecoration(labelText: supplier ? 'Montant à payer' : 'Montant', suffixText: 'FCFA'),
                 validator: Validators.amount,
               ),
               const SizedBox(height: 16),
@@ -168,7 +170,7 @@ class _DebtFormScreenState extends ConsumerState<DebtFormScreen> {
                 textInputAction: TextInputAction.done,
                 maxLines: 2,
                 inputFormatters: <TextInputFormatter>[LengthLimitingTextInputFormatter(500)],
-                decoration: const InputDecoration(labelText: 'Motif (facultatif)', hintText: 'Ex. : 2 sacs de riz'),
+                decoration: InputDecoration(labelText: 'Motif (facultatif)', hintText: supplier ? 'Ex. : 10 cartons de savon' : 'Ex. : 2 sacs de riz'),
                 validator: Validators.reason,
               ),
               const SectionTitle('Catégorie'),
@@ -184,7 +186,7 @@ class _DebtFormScreenState extends ConsumerState<DebtFormScreen> {
                     ),
                 ],
               ),
-              const SectionTitle('Échéance (facultatif)'),
+              SectionTitle(supplier ? 'À payer avant le (facultatif)' : 'Échéance (facultatif)'),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -208,7 +210,7 @@ class _DebtFormScreenState extends ConsumerState<DebtFormScreen> {
               ),
               if (_error != null) ...<Widget>[const SizedBox(height: 16), FormErrorBanner(_error!)],
               const SizedBox(height: 24),
-              BusyButton(label: _editing ? 'Enregistrer' : 'Enregistrer la dette', icon: Icons.check, onPressed: _save),
+              BusyButton(label: _editing ? 'Enregistrer' : (supplier ? 'Enregistrer l\'achat' : 'Enregistrer la dette'), icon: Icons.check, onPressed: _save),
             ],
           ),
         ),

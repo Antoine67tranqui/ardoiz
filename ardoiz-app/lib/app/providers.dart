@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/clock.dart';
 import '../core/config.dart';
+import '../core/legal.dart';
 import '../data/local/app_database.dart';
 import '../data/local/secret_store.dart';
 import '../data/remote/api_client.dart';
@@ -17,6 +18,7 @@ import '../data/sync/ledger_transport.dart';
 import '../data/sync/sync_engine.dart';
 import '../domain/dashboard.dart';
 import '../domain/models.dart';
+import '../domain/treasury.dart';
 import 'connectivity.dart';
 import 'session_service.dart';
 import 'sync_coordinator.dart';
@@ -146,6 +148,12 @@ class SessionNotifier extends Notifier<SessionState> {
     await _service.changePin(currentPin: currentPin, newPin: newPin);
   }
 
+  /// Accepte la version en vigueur des conditions puis rafraîchit le profil.
+  Future<void> acceptTerms() async {
+    await ref.read(backendApiProvider).acceptTerms(Legal.termsVersion);
+    state = SignedIn(await _service.refreshProfile());
+  }
+
   Future<void> deleteAccount({required String pin}) async {
     await _service.deleteAccount(pin: pin);
     state = const SignedOut(reason: SignedOutReason.loggedOut);
@@ -174,6 +182,25 @@ final NotifierProvider<SessionNotifier, SessionState> sessionProvider =
 
 final StreamProvider<List<CustomerView>> customersProvider =
     StreamProvider<List<CustomerView>>((ref) => ref.watch(repositoryProvider).watchCustomers());
+
+/// Clients ou fournisseurs (liste triable et filtrable côté écran).
+final partiesProvider = Provider.family<AsyncValue<List<CustomerView>>, PartyKind>(
+  (ref, kind) => ref.watch(customersProvider).whenData(
+        (all) => all.where((c) => c.customer.kind == kind).toList(growable: false),
+      ),
+);
+
+final StreamProvider<List<CashEntry>> cashEntriesProvider =
+    StreamProvider<List<CashEntry>>((ref) => ref.watch(repositoryProvider).watchCashEntries());
+
+/// Trésorerie d'un mois civil local (clé : premier jour du mois), calculée sur l'appareil.
+final treasuryProvider = Provider.family<TreasurySummary?, DateTime>((ref, monthStart) {
+  final customers = ref.watch(customersProvider).value;
+  final cash = ref.watch(cashEntriesProvider).value;
+  if (customers == null || cash == null) return null;
+  final (from, to) = TreasuryCalculator.monthRange(monthStart);
+  return TreasuryCalculator.compute(customers: customers, cashEntries: cash, from: from, to: to);
+});
 
 final customerByIdProvider = Provider.family<CustomerView?, String>((ref, id) {
   final customers = ref.watch(customersProvider).value ?? const <CustomerView>[];
@@ -254,6 +281,9 @@ final subscriptionStatusProvider =
 
 final reminderRulesProvider =
     FutureProvider.autoDispose<List<ReminderRule>>((ref) => ref.watch(backendApiProvider).reminderRules());
+
+final activityProvider =
+    FutureProvider.autoDispose<List<ActivityEvent>>((ref) => ref.watch(backendApiProvider).activity());
 
 final syncIssuesProvider =
     StreamProvider.autoDispose<List<SyncIssue>>((ref) => ref.watch(repositoryProvider).watchIssues());

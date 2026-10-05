@@ -73,12 +73,33 @@ void main() {
     });
   });
 
+  final latest = appMigrations.last.version;
+
   group('schéma et migrations', () {
-    test('crée le schéma complet en version 1 avec clés étrangères actives', () {
+    test('une base de la version 1 (avant fournisseurs et caisse) migre sans perdre un client ni une dette', () {
+      AppDatabase.open(path: path, hexKey: keyA, migrations: <Migration>[appMigrations.first])
+        ..write((d) {
+          d.execute("INSERT INTO customers (id, name, phone, credit_limit_cents, created_at) VALUES ('c', 'Aïcha', '+229 01 67 07 70 27', 5000, '2026-01-01')");
+          d.execute("INSERT INTO debts VALUES ('d', 'c', 1000, 'Riz', 'Autre', NULL, '2026-01-01')");
+        })
+        ..close();
+
+      final db = AppDatabase.open(path: path, hexKey: keyA);
+      expect(db.schemaVersion, latest);
+      final customer = db.read((d) => d.select('SELECT name, kind, reminder_opt_out FROM customers').first);
+      expect(customer['name'], 'Aïcha');
+      expect(customer['kind'], 'CLIENT', reason: 'les anciens clients restent des clients');
+      expect(customer['reminder_opt_out'], 0);
+      expect(db.read((d) => d.select('SELECT count(*) c FROM debts').first['c']), 1);
+      expect(db.read((d) => d.select('SELECT count(*) c FROM cash_entries').first['c']), 0);
+      db.close();
+    });
+
+    test('crée le schéma complet à la dernière version avec clés étrangères actives', () {
       final db = AppDatabase.openInMemory(hexKey: keyA);
-      expect(db.schemaVersion, 1);
+      expect(db.schemaVersion, latest);
       final tables = db.read((d) => d.select("SELECT name FROM sqlite_master WHERE type='table'").map((r) => r['name']).toSet());
-      expect(tables, containsAll(<String>['meta', 'customers', 'debts', 'payments', 'outbox']));
+      expect(tables, containsAll(<String>['meta', 'customers', 'debts', 'payments', 'outbox', 'cash_entries']));
       expect(db.read((d) => d.select('PRAGMA foreign_keys').first.values.first), 1);
       db.close();
     });
@@ -86,7 +107,7 @@ void main() {
     test('la suppression d\'un client supprime en cascade ses dettes et paiements', () {
       final db = AppDatabase.openInMemory(hexKey: keyA);
       db.write((d) {
-        d.execute("INSERT INTO customers VALUES ('c', 'A', '+229 01 67 07 70 27', NULL, '2026-01-01')");
+        d.execute("INSERT INTO customers (id, name, phone, credit_limit_cents, created_at) VALUES ('c', 'A', '+229 01 67 07 70 27', NULL, '2026-01-01')");
         d.execute("INSERT INTO debts VALUES ('d', 'c', 1000, NULL, 'Autre', NULL, '2026-01-01')");
         d.execute("INSERT INTO payments VALUES ('p', 'd', 500, 'CASH', '2026-01-02')");
         d.execute("DELETE FROM customers WHERE id = 'c'");
@@ -102,7 +123,7 @@ void main() {
         () => db.write((d) => d.execute("INSERT INTO debts VALUES ('d', 'inconnu', 1000, NULL, 'Autre', NULL, '2026-01-01')")),
         throwsA(isA<SqliteException>()),
       );
-      db.write((d) => d.execute("INSERT INTO customers VALUES ('c', 'A', 'x', NULL, '2026-01-01')"));
+      db.write((d) => d.execute("INSERT INTO customers (id, name, phone, credit_limit_cents, created_at) VALUES ('c', 'A', 'x', NULL, '2026-01-01')"));
       expect(
         () => db.write((d) => d.execute("INSERT INTO debts VALUES ('d', 'c', 0, NULL, 'Autre', NULL, '2026-01-01')")),
         throwsA(isA<SqliteException>()),
@@ -117,10 +138,10 @@ void main() {
 
       final migrations = <Migration>[
         ...appMigrations,
-        const Migration(2, <String>['ALTER TABLE customers ADD COLUMN note TEXT']),
+        Migration(latest + 1, const <String>['ALTER TABLE customers ADD COLUMN note TEXT']),
       ];
       final upgraded = AppDatabase.open(path: path, hexKey: keyA, migrations: migrations);
-      expect(upgraded.schemaVersion, 2);
+      expect(upgraded.schemaVersion, latest + 1);
       expect(upgraded.read((d) => d.select("SELECT value FROM meta WHERE key = 'keep'").first['value']), 'me');
       upgraded.write((d) => d.execute("INSERT INTO customers (id, name, phone, created_at, note) VALUES ('c', 'A', 'x', '2026-01-01', 'n')"));
       upgraded.close();
@@ -133,13 +154,13 @@ void main() {
       AppDatabase.open(path: path, hexKey: keyA).close();
       final broken = <Migration>[
         ...appMigrations,
-        const Migration(2, <String>['ALTER TABLE customers ADD COLUMN ok TEXT', 'CREATE TABLE ??? invalide']),
+        Migration(latest + 1, const <String>['ALTER TABLE customers ADD COLUMN ok TEXT', 'CREATE TABLE ??? invalide']),
       ];
 
       expect(() => AppDatabase.open(path: path, hexKey: keyA, migrations: broken), throwsA(isA<SqliteException>()));
 
       final db = AppDatabase.open(path: path, hexKey: keyA);
-      expect(db.schemaVersion, 1);
+      expect(db.schemaVersion, latest);
       final columns = db.read((d) => d.select('PRAGMA table_info(customers)').map((r) => r['name']).toList());
       expect(columns, isNot(contains('ok')));
       db.close();
@@ -148,7 +169,7 @@ void main() {
     test('refuse une base plus récente que l\'application (pas de rétrogradation)', () {
       AppDatabase.open(path: path, hexKey: keyA, migrations: [
         ...appMigrations,
-        const Migration(2, <String>['ALTER TABLE customers ADD COLUMN note TEXT']),
+        Migration(latest + 1, const <String>['ALTER TABLE customers ADD COLUMN note TEXT']),
       ]).close();
 
       expect(() => AppDatabase.open(path: path, hexKey: keyA), throwsA(isA<DatabaseException>()));
@@ -159,7 +180,8 @@ void main() {
     test('clearAllData vide toutes les tables, conserve le schéma et la clé, et efface les traces du disque', () {
       final db = AppDatabase.open(path: path, hexKey: keyA);
       db.write((d) {
-        d.execute("INSERT INTO customers VALUES ('c', 'CLIENT_A_EFFACER_QRS', 'x', NULL, '2026-01-01')");
+        d.execute("INSERT INTO cash_entries VALUES ('e', 'SALE', 500, 'VENTE_A_EFFACER_TUV', 'Autre', '2026-01-01')");
+        d.execute("INSERT INTO customers (id, name, phone, credit_limit_cents, created_at) VALUES ('c', 'CLIENT_A_EFFACER_QRS', 'x', NULL, '2026-01-01')");
         d.execute("INSERT INTO debts VALUES ('d', 'c', 1000, NULL, 'Autre', NULL, '2026-01-01')");
         d.execute("INSERT INTO meta VALUES ('user_id', 'u1')");
         d.execute("INSERT INTO outbox (entity, entity_id, op, payload, created_at) VALUES ('debt', 'd', 'create', '{}', '2026-01-01')");
@@ -167,10 +189,10 @@ void main() {
 
       db.clearAllData();
 
-      for (final table in ['customers', 'debts', 'payments', 'meta', 'outbox']) {
+      for (final table in ['customers', 'debts', 'payments', 'cash_entries', 'meta', 'outbox']) {
         expect(db.read((d) => d.select('SELECT count(*) c FROM $table').first['c']), 0, reason: table);
       }
-      expect(db.schemaVersion, 1);
+      expect(db.schemaVersion, latest);
       db.write((d) => d.execute("INSERT INTO meta VALUES ('apres', 'ok')")); // reste utilisable
       db.close();
       AppDatabase.open(path: path, hexKey: keyA).close(); // même clé

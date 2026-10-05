@@ -9,6 +9,21 @@ class ApiConfig {
     defaultValue: 'http://10.0.2.2:3000/api/v1',
   );
 
+  /// Adresse publique du site (conditions d'utilisation, politique de confidentialité).
+  /// `--dart-define=CARNE_WEB_URL=https://...` ; vide = liens masqués (développement).
+  static const String websiteUrl = String.fromEnvironment('CARNE_WEB_URL');
+
+  /// Une version de production doit pointer vers la politique de confidentialité :
+  /// elle est exigée par les boutiques d'applications et par la loi.
+  static String? validateWebsite(String url, {required bool release}) {
+    if (url.isEmpty) return release ? 'L\'adresse du site (CARNE_WEB_URL) est obligatoire pour une version de production.' : null;
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      return 'L\'adresse du site (CARNE_WEB_URL) doit être une adresse https valide.';
+    }
+    return null;
+  }
+
   /// Message d'erreur si [url] ne convient pas, sinon null. En production
   /// (build release), l'API doit être en HTTPS : les jetons et les données
   /// financières ne circulent jamais en clair.

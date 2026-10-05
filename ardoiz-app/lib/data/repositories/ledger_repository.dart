@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:uuid/uuid.dart';
 
 import '../../core/clock.dart';
+import '../../core/dates.dart';
 import '../../core/formatters.dart';
 import '../../core/money.dart';
 import '../../core/validators.dart';
@@ -86,7 +87,13 @@ class LedgerRepository {
 
   // ---- Clients ----
 
-  Customer addCustomer({required String name, required String phone, Money? creditLimit}) {
+  Customer addCustomer({
+    required String name,
+    required String phone,
+    Money? creditLimit,
+    PartyKind kind = PartyKind.client,
+    bool reminderOptOut = false,
+  }) {
     _check(Validators.customerName(name));
     _check(Validators.customerPhone(phone));
     _checkLimit(creditLimit);
@@ -96,6 +103,8 @@ class LedgerRepository {
       phone: phone.trim(),
       creditLimit: creditLimit,
       createdAt: _clock().toUtc(),
+      kind: kind,
+      reminderOptOut: reminderOptOut,
     );
     _db.write((_) {
       _ledger.upsertCustomer(customer);
@@ -108,6 +117,8 @@ class LedgerRepository {
           'name': customer.name,
           'phone': customer.phone,
           'creditLimitCents': creditLimit?.cents,
+          'kind': kind.wire,
+          'reminderOptOut': reminderOptOut,
         },
       );
     });
@@ -120,6 +131,7 @@ class LedgerRepository {
     String? phone,
     Money? creditLimit,
     bool clearCreditLimit = false,
+    bool? reminderOptOut,
   }) {
     final current = _ledger.customer(id) ?? (throw const DomainException('Client introuvable.'));
     if (name != null) _check(Validators.customerName(name));
@@ -130,6 +142,7 @@ class LedgerRepository {
       phone: phone?.trim(),
       creditLimit: creditLimit,
       clearCreditLimit: clearCreditLimit,
+      reminderOptOut: reminderOptOut,
     );
     _db.write((_) {
       _ledger.upsertCustomer(updated);
@@ -142,6 +155,7 @@ class LedgerRepository {
           if (name != null) 'name': updated.name,
           if (phone != null) 'phone': updated.phone,
           if (creditLimit != null || clearCreditLimit) 'creditLimitCents': updated.creditLimit?.cents,
+          'reminderOptOut': ?reminderOptOut,
         },
       );
     });
@@ -315,6 +329,104 @@ class LedgerRepository {
     });
   }
 
+  // ---- Journal de caisse ----
+
+  List<CashEntry> cashEntries() => _ledger.cashEntries();
+
+  Stream<List<CashEntry>> watchCashEntries() async* {
+    yield cashEntries();
+    await for (final _ in _db.changes) {
+      yield cashEntries();
+    }
+  }
+
+  CashEntry addCashEntry({
+    required CashType type,
+    required Money amount,
+    String? label,
+    String? category,
+    DateTime? occurredAt,
+  }) {
+    _checkAmount(amount);
+    _check(Validators.cashLabel(label));
+    final cleanCategory = (category ?? '').trim().isEmpty ? fallbackDebtCategory : category!.trim();
+    _check(Validators.category(cleanCategory));
+    final now = _clock().toUtc();
+    final entry = CashEntry(
+      id: _uuid.v4(),
+      type: type,
+      amount: amount,
+      label: (label ?? '').trim().isEmpty ? null : label!.trim(),
+      category: cleanCategory,
+      occurredAt: clampToServerWindow((occurredAt ?? now).toUtc(), now),
+    );
+    _db.write((_) {
+      _ledger.upsertCashEntry(entry);
+      _outbox.enqueue(
+        entity: OutboxEntity.cashEntry,
+        entityId: entry.id,
+        op: OutboxOp.create,
+        now: now,
+        payload: <String, Object?>{
+          'type': entry.type.wire,
+          'amountCents': amount.cents,
+          'label': entry.label,
+          'category': entry.category,
+          'occurredAt': entry.occurredAt.toIso8601String(),
+        },
+      );
+    });
+    return entry;
+  }
+
+  /// La nature (vente/dépense) ne change pas : on supprime et on ressaisit.
+  CashEntry updateCashEntry(
+    String id, {
+    Money? amount,
+    String? label,
+    bool clearLabel = false,
+    String? category,
+    DateTime? occurredAt,
+  }) {
+    final current = _ledger.cashEntry(id) ?? (throw const DomainException('Écriture introuvable.'));
+    if (amount != null) _checkAmount(amount);
+    _check(Validators.cashLabel(label));
+    if (category != null) _check(Validators.category(category));
+    final now = _clock().toUtc();
+    final updated = CashEntry(
+      id: current.id,
+      type: current.type,
+      amount: amount ?? current.amount,
+      label: clearLabel ? null : ((label ?? '').trim().isEmpty ? current.label : label!.trim()),
+      category: category?.trim() ?? current.category,
+      occurredAt: occurredAt == null ? current.occurredAt : clampToServerWindow(occurredAt.toUtc(), now),
+    );
+    _db.write((_) {
+      _ledger.upsertCashEntry(updated);
+      _outbox.enqueue(
+        entity: OutboxEntity.cashEntry,
+        entityId: id,
+        op: OutboxOp.update,
+        now: now,
+        payload: <String, Object?>{
+          if (amount != null) 'amountCents': amount.cents,
+          if (clearLabel || (label ?? '').trim().isNotEmpty) 'label': updated.label,
+          if (category != null) 'category': updated.category,
+          if (occurredAt != null) 'occurredAt': updated.occurredAt.toIso8601String(),
+        },
+      );
+    });
+    return updated;
+  }
+
+  void deleteCashEntry(String id) {
+    if (_ledger.cashEntry(id) == null) return;
+    _db.write((_) {
+      _outbox.enqueue(entity: OutboxEntity.cashEntry, entityId: id, op: OutboxOp.delete, now: _clock());
+      _ledger.deleteCashEntry(id);
+    });
+  }
+
   // ---- Problèmes de synchronisation ----
 
   int pendingCount() => _outbox.count(status: OutboxStatus.pending) + _outbox.count(status: OutboxStatus.inFlight);
@@ -347,6 +459,8 @@ class LedgerRepository {
               _ledger.deleteDebt(removed.entityId);
             case OutboxEntity.payment:
               _ledger.deletePayment(removed.entityId);
+            case OutboxEntity.cashEntry:
+              _ledger.deleteCashEntry(removed.entityId);
           }
         }
       });
@@ -365,6 +479,10 @@ class LedgerRepository {
       (OutboxEntity.payment, OutboxOp.create) => 'Remboursement de ${formatMoney(Money.fromCents(p['amountCents']! as int))}',
       (OutboxEntity.payment, OutboxOp.update) => 'Modification d\'un remboursement',
       (OutboxEntity.payment, OutboxOp.delete) => 'Suppression d\'un remboursement',
+      (OutboxEntity.cashEntry, OutboxOp.create) =>
+        '${p['type'] == 'EXPENSE' ? 'Dépense' : 'Vente'} de ${formatMoney(Money.fromCents(p['amountCents']! as int))} en caisse',
+      (OutboxEntity.cashEntry, OutboxOp.update) => 'Modification d\'une écriture de caisse',
+      (OutboxEntity.cashEntry, OutboxOp.delete) => 'Suppression d\'une écriture de caisse',
     };
   }
 

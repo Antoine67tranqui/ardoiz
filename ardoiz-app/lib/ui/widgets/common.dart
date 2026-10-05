@@ -59,17 +59,20 @@ Future<bool> confirm(
 
 /// Montant en FCFA, chiffres de largeur fixe.
 class MoneyText extends StatelessWidget {
-  const MoneyText(this.amount, {super.key, this.style, this.color});
+  const MoneyText(this.amount, {super.key, this.style, this.color, this.prefix = ''});
 
   final Money amount;
   final TextStyle? style;
   final Color? color;
 
+  /// Signe affiché devant le montant (« + », « - »), vide par défaut.
+  final String prefix;
+
   @override
   Widget build(BuildContext context) {
     final base = style ?? Theme.of(context).textTheme.bodyLarge;
     return Text(
-      formatMoney(amount),
+      '$prefix${formatMoney(amount)}',
       style: base?.copyWith(color: color, fontFeatures: AppTheme.tabularFigures),
     );
   }
@@ -79,8 +82,9 @@ class MoneyText extends StatelessWidget {
 /// de déborder (grands montants, texte agrandi), et ne prend jamais plus de
 /// [maxFraction] de la largeur de l'écran.
 class AmountBox extends StatelessWidget {
-  const AmountBox(this.amount, {super.key, this.style, this.color, this.maxFraction = 0.45});
+  const AmountBox(this.amount, {super.key, this.style, this.color, this.maxFraction = 0.45, this.prefix = ''});
 
+  final String prefix;
   final Money amount;
   final TextStyle? style;
   final Color? color;
@@ -92,7 +96,7 @@ class AmountBox extends StatelessWidget {
         child: FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerRight,
-          child: MoneyText(amount, style: style, color: color),
+          child: MoneyText(amount, style: style, color: color, prefix: prefix),
         ),
       );
 }
@@ -179,8 +183,9 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Défilable : avec un texte très agrandi, le contenu dépasse la hauteur de l'écran.
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,

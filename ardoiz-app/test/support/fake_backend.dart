@@ -13,6 +13,7 @@ class FakeBackend implements LedgerTransport {
   final Map<String, Customer> customers = <String, Customer>{};
   final Map<String, Debt> debts = <String, Debt>{};
   final Map<String, Payment> payments = <String, Payment>{};
+  final Map<String, CashEntry> cashEntries = <String, CashEntry>{};
 
   /// Journal des opérations reçues (id, nature).
   final List<String> log = <String>[];
@@ -55,6 +56,7 @@ class FakeBackend implements LedgerTransport {
       customers: customers.values.toList(),
       debts: debts.values.toList(),
       payments: payments.values.toList(),
+      cashEntries: cashEntries.values.toList(),
     );
   }
 
@@ -68,8 +70,13 @@ class FakeBackend implements LedgerTransport {
     switch ((entry.entity, entry.op)) {
       case (OutboxEntity.customer, OutboxOp.create):
         if (customers.containsKey(id)) return; // idempotent : rejeu
-        if (customers.length >= freePlanCustomerLimit) {
-          throw const RejectedException(403, 'Plan gratuit limité.', code: 'FREE_PLAN_LIMIT_REACHED');
+        final kind = PartyKind.fromWire(p['kind'] as String?);
+        if (customers.values.where((c) => c.kind == kind).length >= freePlanCustomerLimit) {
+          throw RejectedException(
+            403,
+            'Le plan gratuit est limite a 15 ${kind == PartyKind.supplier ? 'fournisseurs' : 'clients'}.',
+            code: 'FREE_PLAN_LIMIT_REACHED',
+          );
         }
         customers[id] = Customer(
           id: id,
@@ -77,6 +84,8 @@ class FakeBackend implements LedgerTransport {
           phone: p['phone']! as String,
           creditLimit: p['creditLimitCents'] == null ? null : Money.fromCents(p['creditLimitCents']! as int),
           createdAt: now().toUtc(),
+          kind: kind,
+          reminderOptOut: p['reminderOptOut'] == true,
         );
       case (OutboxEntity.customer, OutboxOp.update):
         final current = customers[id] ?? (throw const RejectedException(404, 'Client introuvable'));
@@ -88,6 +97,8 @@ class FakeBackend implements LedgerTransport {
               ? (p['creditLimitCents'] == null ? null : Money.fromCents(p['creditLimitCents']! as int))
               : current.creditLimit,
           createdAt: current.createdAt,
+          kind: current.kind,
+          reminderOptOut: p.containsKey('reminderOptOut') ? p['reminderOptOut']! as bool : current.reminderOptOut,
         );
       case (OutboxEntity.customer, OutboxOp.delete):
         if (customers.remove(id) == null) throw const RejectedException(404, 'Client introuvable');
@@ -148,6 +159,28 @@ class FakeBackend implements LedgerTransport {
         throw StateError('Les paiements ne se modifient pas.');
       case (OutboxEntity.payment, OutboxOp.delete):
         if (payments.remove(id) == null) throw const RejectedException(404, 'Paiement introuvable');
+      case (OutboxEntity.cashEntry, OutboxOp.create):
+        if (cashEntries.containsKey(id)) return;
+        cashEntries[id] = CashEntry(
+          id: id,
+          type: CashType.fromWire(p['type']! as String),
+          amount: Money.fromCents(p['amountCents']! as int),
+          label: p['label'] as String?,
+          category: p['category']! as String,
+          occurredAt: DateTime.parse(p['occurredAt']! as String),
+        );
+      case (OutboxEntity.cashEntry, OutboxOp.update):
+        final current = cashEntries[id] ?? (throw const RejectedException(404, 'Écriture introuvable'));
+        cashEntries[id] = CashEntry(
+          id: id,
+          type: current.type,
+          amount: p.containsKey('amountCents') ? Money.fromCents(p['amountCents']! as int) : current.amount,
+          label: p.containsKey('label') ? p['label'] as String? : current.label,
+          category: p.containsKey('category') ? p['category']! as String : current.category,
+          occurredAt: p.containsKey('occurredAt') ? DateTime.parse(p['occurredAt']! as String) : current.occurredAt,
+        );
+      case (OutboxEntity.cashEntry, OutboxOp.delete):
+        if (cashEntries.remove(id) == null) throw const RejectedException(404, 'Écriture introuvable');
     }
   }
 
@@ -156,4 +189,5 @@ class FakeBackend implements LedgerTransport {
   void seedCustomer(Customer customer) => customers[customer.id] = customer;
   void seedDebt(Debt debt) => debts[debt.id] = debt;
   void seedPayment(Payment payment) => payments[payment.id] = payment;
+  void seedCash(CashEntry entry) => cashEntries[entry.id] = entry;
 }

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -310,13 +311,7 @@ export class AuthService {
   /** Changement de PIN par un utilisateur deja connecte, apres verification de l'ancien. */
   async changePin(userId: string, currentPin: string, newPin: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-
-    // 400 et non 401 : un 401 signifie « session invalide » pour les clients,
-    // qui tenteraient alors de renouveler le jeton au lieu d'afficher l'erreur.
-    const currentMatches = await bcrypt.compare(currentPin, user.pinHash);
-    if (!currentMatches) {
-      throw new BadRequestException('PIN actuel incorrect');
-    }
+    await this.verifyCurrentPin(user, currentPin);
 
     const pinHash = await bcrypt.hash(newPin, PIN_SALT_ROUNDS);
     await this.prisma.user.update({
@@ -337,6 +332,55 @@ export class AuthService {
   }
 
   /** Profil du commercant connecte (le plan est celui effectivement actif : un Premium expire est FREE). */
+  /**
+   * Controle du PIN pour une action sensible d'un utilisateur DEJA connecte
+   * (changement de PIN, suppression du compte). Memes compteurs et meme
+   * verrouillage que la connexion : sans cela, un jeton d'acces vole (15 min)
+   * permettrait d'essayer les 10 000 codes possibles ici.
+   * 400 pour un PIN faux et 403 pour un compte verrouille : un 401 signifie
+   * « session invalide » pour les clients, qui tenteraient de renouveler le jeton.
+   */
+  private async verifyCurrentPin(
+    user: { id: string; pinHash: string; pinFailedAttempts: number; pinLockedUntil: Date | null },
+    pin: string,
+  ): Promise<void> {
+    if (user.pinLockedUntil && user.pinLockedUntil > new Date()) {
+      const minutesLeft = Math.ceil((user.pinLockedUntil.getTime() - Date.now()) / 60000);
+      throw new ForbiddenException(`Trop de tentatives echouees. Reessayez dans ${minutesLeft} minute(s).`);
+    }
+
+    if (!(await bcrypt.compare(pin, user.pinHash))) {
+      const attempts = user.pinFailedAttempts + 1;
+      const lockedOut = attempts >= MAX_PIN_ATTEMPTS;
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          pinFailedAttempts: lockedOut ? 0 : attempts,
+          pinLockedUntil: lockedOut ? new Date(Date.now() + PIN_LOCKOUT_MINUTES * 60 * 1000) : null,
+        },
+      });
+      if (lockedOut) {
+        throw new ForbiddenException(`Trop de tentatives echouees. Compte verrouille ${PIN_LOCKOUT_MINUTES} minutes.`);
+      }
+      throw new BadRequestException('PIN actuel incorrect');
+    }
+
+    if (user.pinFailedAttempts > 0 || user.pinLockedUntil) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { pinFailedAttempts: 0, pinLockedUntil: null } });
+    }
+  }
+
+  /**
+   * Suppression definitive du compte et de TOUTES ses donnees (clients, dettes,
+   * paiements, relances, regles) par cascade. Confirmee par le PIN.
+   */
+  async deleteAccount(userId: string, pin: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    await this.verifyCurrentPin(user, pin);
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { message: 'Compte supprime' };
+  }
+
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const premium = isPremiumActive(user);

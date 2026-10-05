@@ -162,6 +162,9 @@ abstract interface class BackendApi {
   Future<SessionTokens> login({required String phone, required String pin});
   Future<void> logout();
   Future<void> changePin({required String currentPin, required String newPin});
+
+  /// Supprime définitivement le compte et toutes ses données (confirmé par le PIN).
+  Future<void> deleteAccount({required String pin});
   Future<Profile> profile();
   Future<Profile> updateBusinessName(String businessName);
   Future<SubscriptionStatus> subscriptionStatus();
@@ -225,6 +228,10 @@ class HttpBackendApi implements BackendApi {
 
   @override
   Future<void> logout() => _client.send('POST', '/auth/logout');
+
+  @override
+  Future<void> deleteAccount({required String pin}) =>
+      _client.send('POST', '/auth/account/delete', body: <String, Object?>{'pin': pin});
 
   @override
   Future<void> changePin({required String currentPin, required String newPin}) =>

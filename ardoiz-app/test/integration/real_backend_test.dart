@@ -352,6 +352,23 @@ void main() {
     );
   });
 
+  test('suppression du compte : confirmée par le PIN, efface tout côté serveur, le numéro peut se réinscrire', skip: skip, () async {
+    final owner = await signUp();
+    final a = RealDevice(owner.client, owner.tokens);
+    a.repo.addCustomer(name: 'Aicha', phone: customerPhone);
+    await a.sync();
+
+    await expectLater(owner.api.deleteAccount(pin: '0000'), throwsA(isA<RejectedException>().having((e) => e.statusCode, 'status', 400)));
+    expect((await owner.api.profile()).phone, owner.phone, reason: 'un PIN faux ne supprime rien');
+
+    await owner.api.deleteAccount(pin: '1234');
+    await expectLater(owner.api.profile(), throwsA(isA<UnauthorizedException>()));
+    await expectLater(
+      HttpBackendApi(newClient(TokenStore(InMemorySecretStore()))).login(phone: owner.phone, pin: '1234'),
+      throwsA(isA<RejectedException>().having((e) => e.statusCode, 'status', 401)),
+    );
+  });
+
   test('connexion par PIN, changement de PIN et révocation', skip: skip, () async {
     final owner = await signUp();
     await owner.api.changePin(currentPin: '1234', newPin: '5678');

@@ -146,6 +146,11 @@ class SessionNotifier extends Notifier<SessionState> {
     await _service.changePin(currentPin: currentPin, newPin: newPin);
   }
 
+  Future<void> deleteAccount({required String pin}) async {
+    await _service.deleteAccount(pin: pin);
+    state = const SignedOut(reason: SignedOutReason.loggedOut);
+  }
+
   Future<void> updateBusinessName(String name) async {
     final profile = await _service.updateBusinessName(name);
     state = SignedIn(profile);

@@ -85,6 +85,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: 'Les autres appareils seront déconnectés',
             onTap: () => context.push(Routes.changePin),
           ),
+          _Tile(
+            icon: Icons.delete_forever_outlined,
+            iconColor: theme.colorScheme.error,
+            title: 'Supprimer mon compte',
+            subtitle: 'Efface définitivement vos données',
+            onTap: () => context.push(Routes.deleteAccount),
+          ),
           const SectionTitle('Données'),
           _Tile(
             icon: sync.online ? Icons.sync : Icons.cloud_off_outlined,

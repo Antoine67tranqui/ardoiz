@@ -27,6 +27,7 @@ class Routes {
   static const String reminderRules = '/settings/reminders';
   static const String changePin = '/settings/pin';
   static const String businessName = '/settings/business';
+  static const String deleteAccount = '/settings/delete-account';
   static const String syncIssues = '/settings/sync';
 
   static const Set<String> publicPaths = <String>{welcome, login, signup, signupCode, signupPin};

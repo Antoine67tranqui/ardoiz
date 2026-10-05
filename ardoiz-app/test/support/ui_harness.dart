@@ -126,6 +126,7 @@ const List<String> _allPatterns = <String>[
   Routes.reminderRules,
   Routes.changePin,
   Routes.businessName,
+  Routes.deleteAccount,
   Routes.syncIssues,
 ];
 

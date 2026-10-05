@@ -16,6 +16,7 @@ import '../ui/screens/debts/debt_form_screen.dart';
 import '../ui/screens/home_shell.dart';
 import '../ui/screens/settings/business_name_screen.dart';
 import '../ui/screens/settings/change_pin_screen.dart';
+import '../ui/screens/settings/delete_account_screen.dart';
 import '../ui/screens/settings/reminder_rules_screen.dart';
 import '../ui/screens/settings/settings_screen.dart';
 import '../ui/screens/settings/subscription_screen.dart';
@@ -81,6 +82,7 @@ GoRouter buildRouter(Ref ref, {String? initialLocation}) {
       GoRoute(path: Routes.subscription, builder: (_, _) => const SubscriptionScreen()),
       GoRoute(path: Routes.reminderRules, builder: (_, _) => const ReminderRulesScreen()),
       GoRoute(path: Routes.changePin, builder: (_, _) => const ChangePinScreen()),
+      GoRoute(path: Routes.deleteAccount, builder: (_, _) => const DeleteAccountScreen()),
       GoRoute(path: Routes.businessName, builder: (_, _) => const BusinessNameScreen()),
       GoRoute(path: Routes.syncIssues, builder: (_, _) => const SyncIssuesScreen()),
     ],

@@ -82,6 +82,16 @@ class FakeBackendApi implements BackendApi {
   }
 
   @override
+  Future<void> deleteAccount({required String pin}) async {
+    _enter('deleteAccount');
+    final account = accounts[signedInPhone];
+    if (account == null) throw const UnauthorizedException();
+    if (account.pin != pin) throw const RejectedException(400, 'PIN actuel incorrect');
+    accounts.remove(account.phone);
+    signedInPhone = null;
+  }
+
+  @override
   Future<void> changePin({required String currentPin, required String newPin}) async {
     _enter('changePin');
     final account = accounts[signedInPhone]!;

@@ -10,6 +10,7 @@ import 'package:ardoiz/data/remote/api_exceptions.dart';
 import 'package:ardoiz/data/remote/backend_api.dart';
 import 'package:ardoiz/ui/screens/settings/business_name_screen.dart';
 import 'package:ardoiz/ui/screens/settings/change_pin_screen.dart';
+import 'package:ardoiz/ui/screens/settings/delete_account_screen.dart';
 import 'package:ardoiz/ui/screens/settings/reminder_rules_screen.dart';
 import 'package:ardoiz/ui/screens/settings/settings_screen.dart';
 import 'package:ardoiz/ui/screens/settings/subscription_screen.dart';
@@ -63,6 +64,7 @@ void main() {
         '/home/settings': (_) => const SettingsScreen(),
         '/settings/business': (_) => const BusinessNameScreen(),
         '/settings/pin': (_) => const ChangePinScreen(),
+        '/settings/delete-account': (_) => const DeleteAccountScreen(),
         '/settings/subscription': (_) => const SubscriptionScreen(),
         '/settings/reminders': (_) => const ReminderRulesScreen(),
         '/settings/sync': (_) => const SyncIssuesScreen(),
@@ -77,7 +79,7 @@ void main() {
 
   /// Fait défiler jusqu'au widget (même s'il est déjà construit mais hors écran).
   Future<void> reveal(WidgetTester tester, Finder finder) async {
-    await tester.scrollUntilVisible(finder, 200);
+    await tester.scrollUntilVisible(finder, 200, scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
   }
@@ -105,6 +107,7 @@ void main() {
         'Abonnement': '/settings/subscription',
         'Relances automatiques': '/settings/reminders',
         'Changer mon code PIN': '/settings/pin',
+        'Supprimer mon compte': '/settings/delete-account',
       };
       for (final entry in targets.entries) {
         await pump(tester, initial: '/home/settings');
@@ -323,6 +326,73 @@ void main() {
       await fill(tester, current: '0000');
       expect(find.text('Le PIN actuel est incorrect'), findsOneWidget);
       expect(find.text('Changer le code'), findsOneWidget);
+    });
+  });
+
+  group('suppression du compte', () {
+    Future<void> enterPin(WidgetTester tester, String pin) => tester.enterText(find.byKey(const Key('delete-pin')), pin);
+
+    testWidgets('exige la case à cocher ET un PIN valide ; rien n\'est appelé avant', (tester) async {
+      await pump(tester, initial: '/settings/delete-account');
+      final button = find.widgetWithText(FilledButton, 'Supprimer définitivement mon compte');
+      await reveal(tester, find.text('Supprimer définitivement mon compte'));
+      expect(tester.widget<FilledButton>(button).onPressed, isNull, reason: 'désactivé sans confirmation');
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await enterPin(tester, '12');
+      await reveal(tester, find.text('Supprimer définitivement mon compte'));
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(find.text('Le code PIN comporte exactement 4 chiffres.'), findsOneWidget);
+      verifyNever(() => env.api.deleteAccount(pin: any(named: 'pin')));
+    });
+
+    testWidgets('succès : le compte et les données locales disparaissent, retour à l\'accueil', (tester) async {
+      when(() => env.api.deleteAccount(pin: '1234')).thenAnswer((_) async {});
+      env.repo.addCustomer(name: 'Aïcha', phone: '+22901670000');
+      await pump(tester, initial: '/settings/delete-account');
+
+      await tester.tap(find.byType(Checkbox));
+      await enterPin(tester, '1234');
+      await reveal(tester, find.text('Supprimer définitivement mon compte'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Supprimer définitivement mon compte'));
+      await tester.pumpAndSettle();
+
+      verify(() => env.api.deleteAccount(pin: '1234')).called(1);
+      expect(container.read(sessionProvider), isA<SignedOut>());
+      expect(env.ledger.customers(), isEmpty);
+    });
+
+    testWidgets('PIN refusé : message du serveur, session et données intactes', (tester) async {
+      when(() => env.api.deleteAccount(pin: any(named: 'pin'))).thenThrow(const RejectedException(400, 'PIN actuel incorrect'));
+      env.repo.addCustomer(name: 'Aïcha', phone: '+22901670000');
+      await pump(tester, initial: '/settings/delete-account');
+
+      await tester.tap(find.byType(Checkbox));
+      await enterPin(tester, '0000');
+      await reveal(tester, find.text('Supprimer définitivement mon compte'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Supprimer définitivement mon compte'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('PIN actuel incorrect'), findsOneWidget);
+      expect(container.read(sessionProvider), isA<SignedIn>());
+      expect(env.ledger.customers(), hasLength(1));
+    });
+
+    testWidgets('hors connexion : on ne supprime rien localement et on le dit', (tester) async {
+      when(() => env.api.deleteAccount(pin: any(named: 'pin'))).thenThrow(const NetworkException());
+      env.repo.addCustomer(name: 'Aïcha', phone: '+22901670000');
+      await pump(tester, initial: '/settings/delete-account');
+
+      await tester.tap(find.byType(Checkbox));
+      await enterPin(tester, '1234');
+      await reveal(tester, find.text('Supprimer définitivement mon compte'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Supprimer définitivement mon compte'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Pas de connexion'), findsOneWidget);
+      expect(env.ledger.customers(), hasLength(1));
     });
   });
 

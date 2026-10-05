@@ -139,6 +139,38 @@ void main() {
     expect(ledger.customers(), isEmpty, reason: 'les données de A ne doivent jamais passer chez B');
   });
 
+  group('suppression du compte', () {
+    test('supprime côté serveur puis efface jetons, base locale (même saisies non envoyées) et révocation en attente', () async {
+      final account = api.addAccount();
+      await service.login(phone: account.phone, pin: '1234');
+      repo.addCustomer(name: 'Aicha', phone: '+229 01 67 07 70 27'); // jamais envoyé
+      await secrets.write(SecretKeys.pendingRevocation, 'ancien-jeton');
+
+      await service.deleteAccount(pin: '1234');
+
+      expect(api.accounts, isEmpty);
+      expect(await tokens.hasSession, isFalse);
+      expect(ledger.customers(), isEmpty);
+      expect(outbox.count(), 0);
+      expect(ledger.meta('user_id'), isNull);
+      expect(await secrets.read(SecretKeys.pendingRevocation), isNull);
+    });
+
+    test('PIN faux ou réseau absent : RIEN n\'est effacé localement', () async {
+      final account = api.addAccount();
+      await service.login(phone: account.phone, pin: '1234');
+      repo.addCustomer(name: 'Aicha', phone: '+229 01 67 07 70 27');
+
+      await expectLater(service.deleteAccount(pin: '0000'), throwsA(isA<RejectedException>()));
+      api.failOnce['deleteAccount'] = const NetworkException();
+      await expectLater(service.deleteAccount(pin: '1234'), throwsA(isA<NetworkException>()));
+
+      expect(api.accounts, isNotEmpty);
+      expect(await tokens.hasSession, isTrue);
+      expect(ledger.customers(), hasLength(1));
+    });
+  });
+
   group('changement de compte sur le même appareil', () {
     test('la même personne qui se reconnecte (session expirée) retrouve ses données', () async {
       final account = api.addAccount();

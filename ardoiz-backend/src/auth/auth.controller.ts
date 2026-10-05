@@ -9,6 +9,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePinDto } from './dto/change-pin.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
@@ -74,6 +75,15 @@ export class AuthController {
   @Patch('me')
   updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProfileDto) {
     return this.authService.updateProfile(user.id, dto.businessName);
+  }
+
+  // Action irreversible : limitee, et confirmee par le PIN (comptabilise comme une connexion).
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('account/delete')
+  deleteAccount(@CurrentUser() user: AuthenticatedUser, @Body() dto: DeleteAccountDto) {
+    return this.authService.deleteAccount(user.id, dto.pin);
   }
 
   @ApiBearerAuth()

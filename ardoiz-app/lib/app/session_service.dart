@@ -180,6 +180,16 @@ class SessionService {
     await tokens.save(accessToken: session.accessToken, refreshToken: session.refreshToken);
   }
 
+  /// Suppression définitive du compte (côté serveur) puis de tout ce que ce
+  /// téléphone en garde : jetons et base locale, y compris les saisies non envoyées
+  /// (elles appartiennent à un compte qui n'existe plus).
+  Future<void> deleteAccount({required String pin}) async {
+    await api.deleteAccount(pin: pin);
+    await tokens.clear();
+    await secrets.delete(SecretKeys.pendingRevocation);
+    db.clearAllData();
+  }
+
   /// Déconnexion volontaire. Refusée tant que des saisies ne sont pas envoyées,
   /// sauf [force] (le commerçant a confirmé la perte).
   Future<LogoutResult> logout({bool force = false}) async {

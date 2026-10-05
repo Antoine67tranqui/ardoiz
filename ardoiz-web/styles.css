@@ -112,3 +112,4 @@ th { color: var(--muted); font-weight: 700; }
   nav.site { gap: 4px 14px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+footer.site .links a { margin-right: 16px; }

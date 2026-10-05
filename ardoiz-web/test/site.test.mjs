@@ -11,7 +11,7 @@ const pages = readdirSync(root).filter((f) => f.endsWith('.html'));
 const read = (f) => readFileSync(join(root, f), 'utf8');
 
 test('le site contient les pages attendues', () => {
-  assert.deepEqual(pages.sort(), ['404.html', 'confidentialite.html', 'index.html']);
+  assert.deepEqual(pages.sort(), ['404.html', 'conditions.html', 'confidentialite.html', 'index.html', 'mentions-legales.html']);
 });
 
 for (const page of pages) {
@@ -107,4 +107,46 @@ test('page de confidentialité : chaque point à compléter est explicite et ann
   assert.ok(placeholders.length > 0, 'les informations propres à l\'éditeur doivent rester signalées tant qu\'elles manquent');
   // Aucune promesse que le code ne tient pas.
   for (const claim of ['Suppression', 'Exporter l\'historique', 'Supprimer mon compte']) assert.ok(html.includes(claim), claim);
+});
+
+const backend = (...p) => readFileSync(join(root, '..', 'ardoiz-backend', 'src', ...p), 'utf8');
+
+test('pages juridiques : version, éditeur et points à compléter signalés', () => {
+  const version = backend('common', 'legal.ts').match(/CURRENT_TERMS_VERSION = '([^']+)'/)[1];
+  for (const page of ['confidentialite.html', 'conditions.html', 'mentions-legales.html']) {
+    const html = read(page);
+    assert.match(html, /Version de travail/, page);
+    assert.ok(html.includes(`version ${version}`) || html.includes(`Version en vigueur : ${version}`), `${page} : version ${version}`);
+    assert.match(html, /CIVORA CONSEIL ET SOLUTIONS/, page);
+    assert.match(html, /\[à (?:compléter|confirmer)/, `${page} : aucun point à compléter signalé`);
+  }
+  // Chaque page du site renvoie vers les trois documents et crédite l'éditeur.
+  for (const page of pages) {
+    if (page === '404.html') continue;
+    const html = read(page);
+    for (const target of ['confidentialite.html', 'conditions.html', 'mentions-legales.html']) assert.ok(html.includes(`href="${target}"`), `${page} -> ${target}`);
+    assert.match(html, /conçu et développé par CIVORA CONSEIL ET SOLUTIONS/, page);
+  }
+});
+
+test('la politique de confidentialité ne promet que ce que le code fait', () => {
+  const html = read('confidentialite.html');
+  const auth = backend('auth', 'auth.service.ts');
+  const num = (re) => Number(auth.match(re)[1]);
+  assert.match(html, new RegExp(`verrouillage de ${num(/PIN_LOCKOUT_MINUTES = (\d+)/)} minutes après ${num(/MAX_PIN_ATTEMPTS = (\d+)/)} erreurs`));
+  assert.match(html, new RegExp(`${num(/OTP_TTL_MINUTES = (\d+)/)} minutes de validité`));
+  assert.match(auth, /JWT_REFRESH_EXPIRES_IN'\) \?\? '30d'/);
+  assert.match(html, /30 jours au plus, ou jusqu'à votre déconnexion/);
+  const days = Number(backend('audit', 'audit.service.ts').match(/AUDIT_RETENTION_DAYS = (\d+)/)[1]);
+  assert.equal(days, 365);
+  assert.match(html, /Journal d'activité du compte<\/td><td>12 mois/);
+  assert.match(html, /La version en ligne n'utilise aucun cookie/);
+});
+
+test('les conditions affichent les limites et le prix du serveur', () => {
+  const constants = backend('subscription', 'plan.constants.ts');
+  const n = (name) => Number(constants.match(new RegExp(`${name}\\s*=\\s*([0-9_]+)`))[1].replaceAll('_', ''));
+  const html = read('conditions.html');
+  assert.match(html, new RegExp(`jusqu'à ${n('FREE_PLAN_CUSTOMER_LIMIT')} clients`));
+  assert.ok(html.includes(`${n('PREMIUM_MONTHLY_PRICE_FCFA').toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ')} FCFA pour ${n('PREMIUM_DURATION_DAYS')} jours`));
 });

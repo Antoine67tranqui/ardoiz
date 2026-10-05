@@ -392,6 +392,23 @@ describe('Fournisseurs, caisse, tresorerie et conformite (e2e)', () => {
       expect(JSON.parse(await adminRun(['show', a.phone], ctx.prisma as any))).toMatchObject({ plan: 'FREE', customers: 0, suppliers: 0 });
     });
 
+    it("enregistre l'opposition d'une personne notee chez plusieurs commercants, quel que soit le format du numero", async () => {
+      const c1 = await call('post', '/customers', a, { id: randomUUID(), name: 'Aicha', phone: '+229 01 67 07 70 27' });
+      const c2 = await call('post', '/customers', b, { id: randomUUID(), name: 'Aicha T.', phone: '67-07-70-27' });
+      const other = await call('post', '/customers', a, { id: randomUUID(), name: 'Autre', phone: '+229 01 67 07 70 28' });
+      const supplier = await call('post', '/customers', a, { id: randomUUID(), kind: 'SUPPLIER', name: 'Fourn', phone: '0167077027' });
+
+      expect(await adminRun(['opt-out-contact', '0167077027'], ctx.prisma as any)).toMatch(/^2 fiche\(s\)/);
+      const flags = async (id: string) => (await ctx.prisma.customer.findUniqueOrThrow({ where: { id } })).reminderOptOut;
+      expect(await flags(c1.body.id)).toBe(true);
+      expect(await flags(c2.body.id)).toBe(true);
+      expect(await flags(other.body.id)).toBe(false);
+      expect(await flags(supplier.body.id)).toBe(false); // un fournisseur n'est jamais relance
+      // Idempotent, et la relance est ensuite refusee par le serveur.
+      expect(await adminRun(['opt-out-contact', '+22901 67 07 70 27'], ctx.prisma as any)).toMatch(/^0 fiche/);
+      await expect(adminRun(['opt-out-contact', '123'], ctx.prisma as any)).rejects.toThrow(/Numero invalide/);
+    });
+
     it('refuse les arguments invalides et les comptes inconnus', async () => {
       await expect(adminRun(['grant-premium', a.phone, '0'], ctx.prisma as any)).rejects.toThrow(/entre 1 et 730/);
       await expect(adminRun(['grant-premium', a.phone, 'abc'], ctx.prisma as any)).rejects.toThrow();

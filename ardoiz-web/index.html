@@ -1,15 +1,129 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ardoiz</title>
-  <link rel="icon" type="image/png" href="favicon.png" />
-  <link rel="apple-touch-icon" href="logo-icon.png" />
-  <link rel="stylesheet" href="styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0b5d4b">
+  <title>Carné, le carnet de crédit de votre commerce</title>
+  <meta name="description" content="Carné aide les commerçants à noter ce que leurs clients leur doivent, à suivre les remboursements et à relancer poliment. Tout fonctionne sans internet.">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="assets/favicon-48.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app"></div>
-  <script src="app.js"></script>
+  <a class="skip" href="#contenu">Aller au contenu</a>
+
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="assets/logo-192.png" width="40" height="40" alt="">Carné</a>
+      <nav class="site" aria-label="Navigation principale">
+        <a href="#fonctions">Fonctions</a>
+        <a href="#formules">Formules</a>
+        <a href="confidentialite.html">Confidentialité</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="contenu">
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <h1>Le carnet de crédit de votre commerce</h1>
+          <p class="lead">Notez ce que vos clients vous doivent, suivez les remboursements et relancez poliment, sans jamais perdre une ardoise. Tout fonctionne même sans internet.</p>
+          <p><span class="badge">Application Android : bientôt disponible</span></p>
+          <p class="cta-note">Le lien de téléchargement sera publié ici dès l'ouverture.</p>
+        </div>
+        <figure>
+          <img src="assets/logo-512.png" width="280" height="280" alt="Logo Carné : un carnet à anneaux avec une coche">
+        </figure>
+      </div>
+    </section>
+
+    <section id="fonctions" class="band">
+      <div class="wrap">
+        <h2>Pensé pour la vie réelle d'une boutique</h2>
+        <p class="intro">Le réseau coupe, le téléphone se partage, la boutique ne s'arrête pas. Carné suit votre rythme.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Fonctionne sans internet</h3>
+            <p>Chaque saisie est enregistrée tout de suite sur votre téléphone, puis envoyée automatiquement au retour du réseau. Rien n'est perdu.</p>
+          </article>
+          <article class="card">
+            <h3>Vos données restent protégées</h3>
+            <p>La base du téléphone est chiffrée (AES-256) et l'accès se fait par code PIN. Vos clients et leurs montants ne sont lisibles que par vous.</p>
+          </article>
+          <article class="card">
+            <h3>Un solde clair pour chaque client</h3>
+            <p>Dettes en cours, remboursements partiels, retards, plafond de crédit : vous voyez qui vous doit quoi, et depuis quand.</p>
+          </article>
+          <article class="card">
+            <h3>Des relances courtoises</h3>
+            <p>Envoyez un SMS depuis Carné, ou ouvrez SMS ou WhatsApp avec un message déjà rédigé au bon montant, restant à payer compris.</p>
+          </article>
+          <article class="card">
+            <h3>Un tableau de bord (Premium)</h3>
+            <p>Dettes en retard, clients à surveiller, argent dû par catégorie, évolution sur 6 mois et part des dettes payées à temps.</p>
+          </article>
+          <article class="card">
+            <h3>Votre historique vous appartient</h3>
+            <p>Exportez tout en fichier CSV à tout moment, ou supprimez votre compte et vos données depuis les réglages.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="comment">
+      <div class="wrap">
+        <h2>Comment ça marche</h2>
+        <ol class="steps">
+          <li><strong>Créez votre compte</strong>Avec votre numéro de téléphone, un code reçu par SMS et un code PIN à 4 chiffres.</li>
+          <li><strong>Notez vos ardoises</strong>Ajoutez vos clients, puis chaque dette avec son montant, son motif et son échéance.</li>
+          <li><strong>Suivez et relancez</strong>Enregistrez les remboursements, repérez les retards et relancez en un geste.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="formules" class="band">
+      <div class="wrap">
+        <h2>Formules</h2>
+        <p class="intro">Commencez gratuitement, passez à Premium quand votre carnet grandit.</p>
+        <div class="plans">
+          <article class="plan">
+            <h3>Gratuit</h3>
+            <p class="price">0 FCFA</p>
+            <ul>
+              <li>Jusqu'à 15 clients</li>
+              <li>Dettes, remboursements et solde par client</li>
+              <li>Relances manuelles (SMS, WhatsApp)</li>
+              <li>Fonctionne sans internet</li>
+              <li>Export CSV</li>
+            </ul>
+          </article>
+          <article class="plan premium">
+            <h3>Premium</h3>
+            <p class="price">2 000 FCFA <span class="fineprint">pour 30 jours</span></p>
+            <ul>
+              <li>Clients en nombre illimité</li>
+              <li>Tableau de bord et clients à surveiller</li>
+              <li>Relances automatiques par SMS</li>
+              <li>Tout le plan gratuit</li>
+            </ul>
+          </article>
+        </div>
+        <p class="fineprint">Le paiement de l'abonnement par Mobile Money n'est pas encore ouvert. Aucun renouvellement automatique : vous décidez à chaque fois.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <span>© Carné</span>
+      <a href="confidentialite.html">Politique de confidentialité</a>
+    </div>
+  </footer>
 </body>
 </html>

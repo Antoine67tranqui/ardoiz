@@ -57,3 +57,6 @@ hooks:
 flutter:
   uses-material-design: true
   generate: false
+  assets:
+    # Logo de l'éditeur (CIVORA CONSEIL ET SOLUTIONS), affiché à l'accueil et dans les réglages.
+    - assets/images/civora-logo.png

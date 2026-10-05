@@ -9,6 +9,7 @@ import { debtView, partyBalance, periodRange, activityLabel } from '../app/js/mo
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const app = join(root, 'app');
+
 const read = (p) => readFileSync(join(app, p), 'utf8');
 function files(dir) {
   return readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? files(join(dir, f)) : [join(dir, f)]));
@@ -80,6 +81,8 @@ test('le client mentionne CIVORA et renvoie vers les pages légales', () => {
   const html = read('index.html');
   assert.match(html, /CIVORA Conseil et Solutions/);
   for (const page of ['confidentialite.html', 'conditions.html', 'mentions-legales.html']) assert.ok(html.includes(`../${page}`), page);
+  assert.ok(html.includes('../assets/civora-logo.png'));
+  assert.ok(existsSync(join(root, 'assets', 'civora-logo.png')));
 });
 
 // ---- Montants ----

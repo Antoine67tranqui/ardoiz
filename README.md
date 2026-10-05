@@ -107,4 +107,4 @@ Tout est dans **[docs/guide-deploiement.md](docs/guide-deploiement.md)** : domai
 - L'application n'a pas pu être compilée pour Android dans l'environnement de développement utilisé (pas de SDK Android) : les tests Flutter s'exécutent sur la machine hôte avec le même SQLCipher, mais un essai sur un vrai téléphone reste à faire avant diffusion.
 - Les anciennes données de la version « Ardoiz » ne sont pas migrées.
 - Les images Docker et le fichier Caddy n'ont pas pu être exécutés dans l'environnement de développement (pas de moteur Docker) : la CI les construit et les valide, le premier déploiement est leur premier essai réel.
-- Le logo de CIVORA n'est pas intégré (aucun fichier disponible) ; le nom l'est partout.
+- Le logo de CIVORA est un PNG sur carte blanche ; une version vectorielle ou à fond transparent serait plus nette.

@@ -385,7 +385,10 @@ void main() {
     testWidgets('la page de réglages crédite la structure qui a conçu Carné', (tester) async {
       await pumpApp(tester, at: Routes.settings);
       await reveal(tester, find.text('Conçu et développé par'));
-      expect(find.text('CIVORA Conseil et Solutions'), findsOneWidget);
+      expect(find.text('CIVORA CONSEIL ET SOLUTIONS'), findsOneWidget);
+      // Le logo de l'éditeur est affiché et décrit pour les lecteurs d'écran.
+      await reveal(tester, find.bySemanticsLabel('Logo CIVORA Conseil et Solutions'));
+      expect(find.bySemanticsLabel('Logo CIVORA Conseil et Solutions'), findsOneWidget);
     });
   });
 }

@@ -1,6 +1,6 @@
 # Registre des traitements de Carné
 
-Éditeur et responsable pour les données de compte : CIVORA CONSEIL ET SOLUTIONS. Mise à jour : à chaque évolution fonctionnelle (voir la fin du document).
+Éditeur et responsable pour les données de compte : CIVORA CONSEIL ET SOLUTIONS (sigle CCS), entreprise exploitée par Sedjro Antoine Tranquillin Affossogbe, RCCM de Cotonou n° RB/ABC/21 A 32517. Mise à jour : à chaque évolution fonctionnelle (voir la fin du document).
 
 Légende des rôles : **R** = CIVORA est responsable du traitement ; **ST** = CIVORA traite pour le compte du commerçant, qui est responsable [qualification à faire valider par un juriste].
 

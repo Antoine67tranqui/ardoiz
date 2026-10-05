@@ -68,7 +68,8 @@ export async function main() {
       h('button', { type: 'button', class: 'btn ghost', onclick: logout }, 'Me déconnecter'),
       h('a', { class: 'btn danger-ghost', href: '#/reglages/suppression' }, 'Supprimer mon compte')),
     h('div', { class: 'about' },
-      h('p', {}, h('strong', {}, 'Carné'), ' · conçu et développé par ', h('strong', {}, 'CIVORA Conseil et Solutions'), '.')));
+      h('img', { class: 'civora', src: '../assets/civora-logo.png', width: 112, height: 114, alt: 'Logo CIVORA Conseil et Solutions' }),
+      h('p', {}, h('strong', {}, 'Carné'), ' · conçu et développé par ', h('strong', {}, 'CIVORA CONSEIL ET SOLUTIONS'), '.')));
 }
 
 export async function activity() {

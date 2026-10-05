@@ -182,6 +182,9 @@ test('bilan réservé à Premium, réglages, journal d\'activité, export et sup
 
   await page.getByRole('link', { name: 'Réglages' }).click();
   await page.getByText(/Gratuite : 0 client\(s\)/).waitFor();
+  // Le logo de l'éditeur se charge réellement (image décodée, pas une image cassée).
+  const logoOk = await page.locator('img.civora').first().evaluate((img) => img.complete && img.naturalWidth > 0);
+  assert.ok(logoOk, 'logo CIVORA non chargé');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.getByRole('button', { name: 'Toutes mes données (JSON)' }).click(),

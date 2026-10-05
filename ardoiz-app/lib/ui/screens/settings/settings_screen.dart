@@ -9,6 +9,7 @@ import '../../../app/sync_coordinator.dart';
 import '../../../core/brand.dart';
 import '../../../core/formatters.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../widgets/auth_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy_widgets.dart';
 
@@ -150,6 +151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: 'Conçu et développé par',
             subtitle: Brand.publisher,
           ),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Center(child: PublisherLogo(width: 112))),
           const SizedBox(height: 24),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(foregroundColor: theme.colorScheme.error, side: BorderSide(color: theme.colorScheme.error)),

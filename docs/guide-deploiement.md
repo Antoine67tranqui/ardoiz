@@ -178,7 +178,7 @@ Procédure :
 
 1. Sur votre poste (avec accès internet normal) : `FEDAPAY_SECRET_KEY=sk_sandbox_... node ardoiz-backend/scripts/fedapay-sandbox-check.mjs`.
 2. Copiez la sortie dans la conversation de développement : l'intégration sera écrite d'après les réponses réelles (champs, statuts, vérification de la signature des notifications), puis testée.
-3. Créez le compte **réel** (live) sur FedaPay et soumettez-le à validation. D'après la documentation consultée, pour une entreprise : RCCM, IFU, pièce d'identité du représentant légal et signature, en scans lisibles des originaux. Préparez ces pièces maintenant : la validation prend du temps.
+3. Créez le compte **réel** (live) sur FedaPay et soumettez-le à validation. D'après la documentation consultée, il existe plusieurs types de compte : pour un particulier ou indépendant, pièce d'identité, IFU et signature ; pour une entreprise, RCCM, IFU, pièce d'identité du représentant légal et signature (scans lisibles des originaux). Votre RCCM est celui d'une personne physique exploitant sous le nom CIVORA CONSEIL ET SOLUTIONS : demandez à FedaPay quel type de compte convient. **Il vous manque l'IFU dans les documents transmis** : procurez-vous l'attestation maintenant, la validation prend du temps.
 4. Renseignez le compte Mobile Money (MTN ou Moov) qui recevra les fonds ; il est vérifié par un code SMS.
 5. Quand l'intégration est vérifiée en bac à sable, passez en production : clés réelles dans `.env`, mise à jour de la politique de confidentialité (nommer FedaPay, version des textes changée), test avec de vrais petits montants.
 6. Avant l'ouverture, vérifiez auprès de FedaPay ses frais et ses conditions d'usage pour l'encaissement d'abonnements : je n'ai pas pu les consulter.
@@ -221,7 +221,7 @@ Installez l'APK sur 2 ou 3 téléphones Android de modèles et de versions diff�
 D'après les sources consultées :
 
 - Frais d'inscription unique de 25 USD, pour un compte personnel comme pour un compte organisation.
-- Un **compte organisation** exige un numéro D-U-N-S (identifiant à neuf chiffres délivré par Dun & Bradstreet, gratuit mais pouvant prendre jusqu'à environ 30 jours). Les comptes organisation ne sont en général pas soumis à l'obligation de test fermé ci-dessous.
+- Un **compte organisation** exige un numéro D-U-N-S (pour une entreprise individuelle comme CIVORA, vérifiez auprès de Google et de Dun & Bradstreet que l'organisation est éligible et sous quel nom il faut la déclarer : point non vérifié) (identifiant à neuf chiffres délivré par Dun & Bradstreet, gratuit mais pouvant prendre jusqu'à environ 30 jours). Les comptes organisation ne sont en général pas soumis à l'obligation de test fermé ci-dessous.
 - Un **compte personnel** créé après le 13 novembre 2023 doit mener un **test fermé** avec au moins 12 testeurs inscrits en continu pendant 14 jours avant de demander l'accès à la production. Le test interne ne compte pas.
 
 Recommandation : si CIVORA peut obtenir son numéro D-U-N-S, créez un compte **organisation** au nom de CIVORA CONSEIL ET SOLUTIONS : cela évite la contrainte des 12 testeurs, et l'éditeur affiché dans la boutique est votre structure. Lancez la demande de D-U-N-S tout de suite. Sinon, recrutez dès maintenant 12 commerçants ou proches comme testeurs (c'est de toute façon utile pour le pilote).
@@ -245,7 +245,7 @@ Non vérifié ici : les exigences de la fiche (captures d'écran, classification
 4. Quand c'est terminé, supprimez les passages [à compléter], adaptez le test `ardoiz-web/test/site.test.mjs` qui les exige (il est là pour empêcher une publication accidentelle), puis lancez `sh deploy/smoke.sh https://carne.example` **sans** l'exception : il doit passer.
 5. Si le texte change, changez la version (`ardoiz-backend/src/common/legal.ts`, `ardoiz-app/lib/core/legal.dart`, `ardoiz-web/app/config.js` : un test vérifie qu'elles sont identiques). Tous les utilisateurs devront alors accepter de nouveau.
 
-Identité CIVORA : le logo n'est pas intégré, car le dossier "Logo" de votre Drive ne contenait aucun fichier lisible pour moi. Déposez le fichier (SVG de préférence) dans `ardoiz-web/assets/civora-logo.svg` et demandez l'intégration. Le nom "CIVORA CONSEIL ET SOLUTIONS" figure déjà dans l'application (réglages, écran d'accueil), le site, le client web et les textes légaux.
+Identité CIVORA : le logo que vous avez transmis est intégré (page d'accueil et pied de page du site, mentions légales, client web, écran d'accueil et réglages de l'application). Si vous disposez d'une version vectorielle (SVG) ou à fond transparent, elle donnerait un rendu plus net ; l'image actuelle est un PNG sur carte blanche. Le RCCM (RB/ABC/21 A 32517) est renseigné dans les pages légales d'après votre extrait ; restent l'IFU, l'adresse e-mail dédiée et vos décisions sur l'adresse complète (voir `docs/conformite/points-a-completer.md`).
 
 ## 12. Pilote sur le terrain
 

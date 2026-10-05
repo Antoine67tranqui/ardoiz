@@ -113,3 +113,11 @@ th { color: var(--muted); font-weight: 700; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 footer.site .links a { margin-right: 16px; }
+
+/* Logo de l'éditeur : posé sur une carte blanche pour rester lisible en thème sombre. */
+img.civora { background: #fff; border-radius: 10px; padding: 3px; height: auto; }
+img.civora.big { padding: 10px; border-radius: 16px; max-width: 224px; width: 100%; }
+footer.site .made { display: inline-flex; align-items: center; gap: 12px; }
+.about { display: flex; flex-wrap: wrap; align-items: center; gap: 24px 36px; }
+.about > div { flex: 1 1 320px; }
+.brandline { margin: 20px 0; }

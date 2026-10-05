@@ -16,6 +16,25 @@ class BrandMark extends StatelessWidget {
       );
 }
 
+/// Logo de l'éditeur, posé sur une carte blanche : ses lettres bleu nuit restent lisibles en thème sombre.
+class PublisherLogo extends StatelessWidget {
+  const PublisherLogo({super.key, this.width = 96});
+
+  final double width;
+
+  static const String asset = 'assets/images/civora-logo.png';
+  static const String label = 'Logo CIVORA Conseil et Solutions';
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(width * 0.12)),
+        child: Padding(
+          padding: EdgeInsets.all(width * 0.06),
+          child: Image.asset(asset, width: width, semanticLabel: label, filterQuality: FilterQuality.medium),
+        ),
+      );
+}
+
 class CarneLogoPainter extends CustomPainter {
   const CarneLogoPainter();
 

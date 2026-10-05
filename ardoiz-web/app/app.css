@@ -132,3 +132,9 @@ input[type=search], .field input, .field textarea { width: 100%; min-height: 48p
 .noscript { padding: 16px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
 @media (min-width: 560px) { .toolbar { flex-direction: row; flex-wrap: wrap; align-items: center; } .toolbar input[type=search] { flex: 1 1 240px; width: auto; } }
+
+/* Logo de l'éditeur sur carte blanche (lisible en thème sombre). */
+img.civora { background: #fff; border-radius: 8px; padding: 2px; height: auto; flex: none; }
+.made { display: flex; align-items: center; gap: 12px; }
+.about { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.about img.civora { padding: 8px; border-radius: 14px; }

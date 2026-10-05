@@ -95,7 +95,7 @@ test('les chiffres de la formule correspondent aux règles du backend', () => {
 });
 
 test('les logos existent aux tailles annoncées', () => {
-  for (const f of ['logo-512.png', 'logo-192.png', 'apple-touch-icon.png', 'favicon-32.png', 'favicon-48.png']) {
+  for (const f of ['logo-512.png', 'logo-192.png', 'apple-touch-icon.png', 'favicon-32.png', 'favicon-48.png', 'civora-logo.png']) {
     assert.ok(existsSync(join(root, 'assets', f)), f);
   }
 });
@@ -149,4 +149,26 @@ test('les conditions affichent les limites et le prix du serveur', () => {
   const html = read('conditions.html');
   assert.match(html, new RegExp(`jusqu'à ${n('FREE_PLAN_CUSTOMER_LIMIT')} clients`));
   assert.ok(html.includes(`${n('PREMIUM_MONTHLY_PRICE_FCFA').toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ')} FCFA pour ${n('PREMIUM_DURATION_DAYS')} jours`));
+});
+
+test('le logo de l\'éditeur est affiché avec un texte alternatif, léger, sur toutes les pages publiques', () => {
+  for (const page of ['index.html', 'confidentialite.html', 'conditions.html', 'mentions-legales.html']) {
+    assert.match(read(page), /<img class="civora[^>]*src="assets\/civora-logo\.png"[^>]*alt="Logo CIVORA Conseil et Solutions"/, page);
+  }
+  assert.ok(readFileSync(join(root, 'assets', 'civora-logo.png')).length < 150 * 1024, 'logo trop lourd');
+});
+
+test('l\'identité légale de l\'éditeur vient du registre du commerce et reste cohérente partout', () => {
+  const rccm = 'RB/ABC/21 A 32517';
+  for (const page of ['confidentialite.html', 'conditions.html', 'mentions-legales.html']) assert.ok(read(page).includes(rccm), `${page} : RCCM`);
+  const mentions = read('mentions-legales.html');
+  assert.match(mentions, /Cotonou/);
+  assert.match(mentions, /Sedjro Antoine Tranquillin Affossogbe/);
+  // Ce qui ne doit pas être publié sans décision de l'éditeur : coordonnées personnelles et état civil.
+  for (const page of pages) {
+    const html = read(page);
+    assert.doesNotMatch(html, /@gmail\.com/i, `${page} : adresse e-mail personnelle`);
+    assert.doesNotMatch(html, /\+229\s?6707|67077027/, `${page} : numéro de téléphone personnel`);
+    assert.doesNotMatch(html, /1993|Dogbo/, `${page} : état civil`);
+  }
 });

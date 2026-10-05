@@ -8,7 +8,7 @@ class Brand {
   static const String tagline = 'Le carnet de crédit de votre commerce';
 
   /// Structure qui a conçu et développé Carné (nom tel qu'il figure dans ses documents).
-  static const String publisher = 'CIVORA Conseil et Solutions';
+  static const String publisher = 'CIVORA CONSEIL ET SOLUTIONS';
 
   /// Doit correspondre à `version:` de pubspec.yaml (vérifié par un test).
   static const String version = '0.2.0';

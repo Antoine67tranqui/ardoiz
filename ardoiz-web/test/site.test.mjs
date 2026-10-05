@@ -62,14 +62,14 @@ for (const page of pages) {
 
   test(`${page} : ni ancien nom de marque, ni tiret cadratin`, () => {
     assert.doesNotMatch(html, /ardoiz/i);
-    assert.doesNotMatch(html, /—/);
+    assert.doesNotMatch(html, /\u2014/);
   });
 }
 
 test('la feuille de style n\'importe rien d\'externe', () => {
   const css = read('styles.css');
   assert.doesNotMatch(css, /@import|url\(\s*["']?https?:/i);
-  assert.doesNotMatch(css, /—/);
+  assert.doesNotMatch(css, /\u2014/);
 });
 
 test('les en-têtes _headers reprennent la même CSP que les pages (plus frame-ancestors)', () => {

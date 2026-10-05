@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#0b5d4b">
+  <title>Carné en ligne</title>
+  <meta name="description" content="Carné en ligne : votre carnet de crédit, accessible depuis un navigateur lorsque vous avez une connexion.">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <a class="skip" href="#view">Aller au contenu</a>
+  <div id="offline" class="offline" role="status" hidden>Vous n'avez pas de connexion. Cette version en ligne a besoin d'internet : reconnectez-vous, ou utilisez l'application Android qui fonctionne sans réseau.</div>
+  <div id="shell">
+    <header class="top">
+      <a class="brand" href="#/clients"><img src="../assets/logo-192.png" width="32" height="32" alt="">Carné</a>
+      <span id="business" class="business"></span>
+    </header>
+    <nav id="tabs" class="tabs" aria-label="Navigation principale" hidden></nav>
+    <main id="view" tabindex="-1"></main>
+    <footer class="foot">
+      <p>Carné est conçu et développé par <strong>CIVORA Conseil et Solutions</strong>.</p>
+      <p><a href="../confidentialite.html">Confidentialité</a> · <a href="../conditions.html">Conditions d'utilisation</a> · <a href="../mentions-legales.html">Mentions légales</a></p>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">Carné en ligne a besoin de JavaScript. Vous pouvez aussi utiliser l'application Android.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -5,10 +5,16 @@ on:
     paths:
       - 'ardoiz-web/**'
       - 'ardoiz-backend/src/subscription/plan.constants.ts'
+      - 'ardoiz-backend/src/common/legal.ts'
+      - 'ardoiz-app/lib/core/legal.dart'
+      - '.github/workflows/web-ci.yml'
   pull_request:
     paths:
       - 'ardoiz-web/**'
       - 'ardoiz-backend/src/subscription/plan.constants.ts'
+      - 'ardoiz-backend/src/common/legal.ts'
+      - 'ardoiz-app/lib/core/legal.dart'
+      - '.github/workflows/web-ci.yml'
 
 jobs:
   site:
@@ -22,3 +28,62 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+
+  # Recette de bout en bout : vrai navigateur, vrai backend, vraie base PostgreSQL.
+  app-e2e:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://ardoiz:ardoiz@localhost:5432/ardoiz_test?schema=public
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ardoiz
+          POSTGRES_PASSWORD: ardoiz
+          POSTGRES_DB: ardoiz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ardoiz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ardoiz-backend/package-lock.json
+      - name: Build backend
+        working-directory: ardoiz-backend
+        run: |
+          npm ci
+          npm run prisma:generate
+          npm run build
+          npx prisma migrate deploy
+      - name: Start backend (simulated SMS: the OTP code is returned in development mode)
+        working-directory: ardoiz-backend
+        run: |
+          nohup node dist/main.js > /tmp/backend.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3998/api/v1/health && exit 0; sleep 1; done
+          cat /tmp/backend.log; exit 1
+        env:
+          PORT: 3998
+          JWT_ACCESS_SECRET: ci-access-secret-0123456789abcdef0123456789
+          JWT_REFRESH_SECRET: ci-refresh-secret-0123456789abcdef012345678
+          JWT_OTP_SECRET: ci-otp-secret-0123456789abcdef0123456789abc
+          MOMO_WEBHOOK_SECRET: ci-webhook-secret-0123456789abcdef0123456789
+          TRUST_PROXY: '1'
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --prefix /tmp/pw playwright@1.56.1
+          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+      - name: Browser end-to-end tests
+        working-directory: ardoiz-web
+        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_PATH: /tmp/pw/node_modules/playwright/index.mjs
+      - name: Backend log on failure
+        if: failure()
+        run: tail -n 100 /tmp/backend.log

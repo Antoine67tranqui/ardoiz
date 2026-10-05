@@ -1,0 +1,15 @@
+{
+  "name": "Carné en ligne",
+  "short_name": "Carné",
+  "description": "Le carnet de crédit de votre commerce, en ligne.",
+  "lang": "fr",
+  "start_url": "./index.html#/clients",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf8f1",
+  "theme_color": "#0b5d4b",
+  "icons": [
+    { "src": "../assets/logo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../assets/logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

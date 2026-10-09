@@ -8,7 +8,7 @@ Les textes publics contiennent des passages entre crochets, volontairement laiss
 | RCCM : RB/ABC/21 A 32517, greffe du tribunal de commerce de Cotonou, immatriculation du 05 juillet 2021 | mentions, confidentialité, conditions | **Renseigné** (même source) |
 | Forme juridique | mentions légales | Écrit "entreprise individuelle [à confirmer]" : l'extrait est établi au nom de la personne physique (propriétaire-exploitant), mais il ne mentionne pas la forme en toutes lettres. À confirmer par vous |
 | Logo de CIVORA | site, mentions, client web, application | **Intégré** (fichier fourni dans la conversation) |
-| Adresse complète du siège | mentions, confidentialité | **Votre décision.** L'extrait indique une adresse à Abomey-Calavi (Togba) qui est aussi votre domicile. Par prudence, seule la commune et le département sont publiés ; décidez si l'adresse complète doit l'être |
+| Adresse du siège | mentions, confidentialité | **Renseignée** sur votre demande : Togba Maria-Gleta, Abomey-Calavi, Atlantique, en face de l'hôpital Saint Jean. Le nom du propriétaire de la maison, qui figure sur l'extrait, n'est pas publié (c'est un tiers) |
 | IFU | mentions, confidentialité | **Manquant** : il ne figure ni dans l'extrait du RCCM ni dans l'annonce légale. À fournir (attestation d'IFU) |
 | Adresse e-mail dédiée aux demandes de données | confidentialité, conditions, mentions | **À créer.** L'extrait du RCCM indique une adresse Gmail personnelle et un numéro de téléphone : je ne les ai pas publiés sans votre accord. Une adresse dédiée au nom de domaine du service est préférable |
 | Téléphone de contact | mentions | À décider (voir ci-dessus) |

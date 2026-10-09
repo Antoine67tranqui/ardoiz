@@ -163,6 +163,9 @@ test('l\'identité légale de l\'éditeur vient du registre du commerce et reste
   for (const page of ['confidentialite.html', 'conditions.html', 'mentions-legales.html']) assert.ok(read(page).includes(rccm), `${page} : RCCM`);
   const mentions = read('mentions-legales.html');
   assert.match(mentions, /Cotonou/);
+  assert.match(mentions, /Togba Maria-Gleta, Abomey-Calavi/);
+  // Nom d'un tiers (propriétaire de la maison) présent sur l'extrait : jamais publié.
+  for (const page of pages) assert.doesNotMatch(read(page), /Sounandja/i, `${page} : nom d'un tiers`);
   assert.match(mentions, /Sedjro Antoine Tranquillin Affossogbe/);
   // Ce qui ne doit pas être publié sans décision de l'éditeur : coordonnées personnelles et état civil.
   for (const page of pages) {

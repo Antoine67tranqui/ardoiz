@@ -33,7 +33,7 @@ describe('AuthService.login (verrouillage PIN)', () => {
     const jwt = { sign: jest.fn().mockReturnValue('token') };
     const config = { get: jest.fn().mockReturnValue('secret') };
     const notifications = {};
-    const service = new AuthService(prisma as any, jwt as any, config as any, notifications as any);
+    const service = new AuthService(prisma as any, jwt as any, config as any, notifications as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
     return { service, prisma };
   };
 
@@ -77,5 +77,54 @@ describe('AuthService.login (verrouillage PIN)', () => {
         data: { pinFailedAttempts: 0, pinLockedUntil: null },
       }),
     );
+  });
+});
+
+describe('AuthService.refresh (revocation via tokenVersion)', () => {
+  const buildService = (user: Record<string, unknown>, verifiedPayload: Record<string, unknown>) => {
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue(user) },
+    };
+    const jwt = {
+      verify: jest.fn().mockReturnValue(verifiedPayload),
+      sign: jest.fn().mockReturnValue('new-token'),
+    };
+    const config = { get: jest.fn().mockReturnValue('secret') };
+    return new AuthService(prisma as any, jwt as any, config as any, {} as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
+  };
+
+  it('emet de nouveaux jetons quand tokenVersion correspond', async () => {
+    const service = buildService(
+      { id: 'user-1', phone: '+22990000000', tokenVersion: 2 },
+      { sub: 'user-1', phone: '+22990000000', tokenVersion: 2 },
+    );
+
+    const result = await service.refresh('a-refresh-token');
+
+    expect(result.accessToken).toBe('new-token');
+  });
+
+  it('rejette un refresh token dont la tokenVersion est perimee (logout/changePin anterieur)', async () => {
+    const service = buildService(
+      { id: 'user-1', phone: '+22990000000', tokenVersion: 3 },
+      { sub: 'user-1', phone: '+22990000000', tokenVersion: 2 },
+    );
+
+    await expect(service.refresh('a-stale-refresh-token')).rejects.toThrow(UnauthorizedException);
+  });
+});
+
+describe('AuthService.logout / changePin (revocation)', () => {
+  it('logout incremente tokenVersion', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = { user: { update } };
+    const service = new AuthService(prisma as any, {} as any, {} as any, {} as any, { record: jest.fn().mockResolvedValue(undefined) } as any, {} as any);
+
+    await service.logout('user-1');
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { tokenVersion: { increment: 1 } },
+    });
   });
 });

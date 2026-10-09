@@ -1,0 +1,97 @@
+# Pile de PRODUCTION de Carne : base PostgreSQL, API, site + client web servis par Caddy
+# (HTTPS automatique), sauvegardes chiffrees quotidiennes.
+# Aucun port de la base ni de l'API n'est expose : seul Caddy ecoute (80 et 443). L'API garde un
+# acces sortant a internet (envoi de SMS, paiement) ; la base n'est joignable que par les autres services.
+#
+#   cp .env.production.example .env   # puis remplir (voir docs/guide-deploiement.md)
+#   docker compose up -d --build
+name: carne
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: carne
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD est requis}
+      POSTGRES_DB: carne
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carne -d carne"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: ../ardoiz-backend
+      target: migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://carne:${DB_PASSWORD}@db:5432/carne?schema=public
+
+  api:
+    build:
+      context: ../ardoiz-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://carne:${DB_PASSWORD}@db:5432/carne?schema=public
+      # Un seul proxy (Caddy) devant l'API : necessaire pour que la limitation de debit
+      # voie l'adresse reelle des utilisateurs et non celle du proxy.
+      TRUST_PROXY: "1"
+      CORS_ORIGINS: ""
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    depends_on: [api]
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN est requis}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL est requis}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+
+  backup:
+    build:
+      context: ./backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: carne
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: carne
+      # Cle PUBLIQUE age : le serveur ne peut que chiffrer. La cle privee reste hors du serveur.
+      AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?BACKUP_AGE_RECIPIENT est requis}
+      BACKUP_KEEP_DAYS: "30"
+    volumes:
+      - backups:/backups
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+  backups:

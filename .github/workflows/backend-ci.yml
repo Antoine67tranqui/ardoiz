@@ -15,6 +15,22 @@ defaults:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgresql://ardoiz:ardoiz@localhost:5432/ardoiz_test?schema=public
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ardoiz
+          POSTGRES_PASSWORD: ardoiz
+          POSTGRES_DB: ardoiz_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ardoiz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -38,3 +54,61 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - name: Check schema drift (migrations vs schema.prisma)
+        run: npx prisma migrate diff --from-url "$TEST_DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+  # L'image de production doit se construire, migrer la base puis démarrer en mode production.
+  docker-image:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: carne
+          POSTGRES_PASSWORD: carne
+          POSTGRES_DB: carne
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U carne"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construire les images (migration et API)
+        run: |
+          docker build --target migrate -t carne-migrate ardoiz-backend
+          docker build -t carne-api ardoiz-backend
+      - name: Migrer la base
+        run: docker run --rm --network host -e DATABASE_URL='postgresql://carne:carne@localhost:5432/carne?schema=public' carne-migrate
+      - name: Refus de démarrer avec des secrets d'exemple (production)
+        run: |
+          if docker run --rm --network host -e DATABASE_URL='postgresql://carne:carne@localhost:5432/carne?schema=public' \
+            -e JWT_ACCESS_SECRET=change-me-access-secret -e JWT_REFRESH_SECRET=change-me-refresh-secret -e JWT_OTP_SECRET=change-me-otp carne-api; then
+            echo "::error::l'API a démarré avec des secrets d'exemple"; exit 1
+          fi
+      - name: Démarrer l'API de production et la sonder
+        run: |
+          docker run -d --name api --network host -e PORT=3000 \
+            -e DATABASE_URL='postgresql://carne:carne@localhost:5432/carne?schema=public' \
+            -e JWT_ACCESS_SECRET=ci-access-secret-0123456789abcdef0123456789 \
+            -e JWT_REFRESH_SECRET=ci-refresh-secret-0123456789abcdef012345678 \
+            -e JWT_OTP_SECRET=ci-otp-secret-0123456789abcdef0123456789abc carne-api
+          for i in $(seq 1 30); do curl -sf localhost:3000/api/v1/health && break; sleep 1; done
+          curl -sf localhost:3000/api/v1/health || { docker logs api; exit 1; }
+          # Production : le code SMS n'est jamais renvoyé dans la réponse, et l'utilisateur n'est pas root.
+          docker exec api sh -c 'test "$(id -u)" != "0"'
+          docker exec api node dist/admin/cli.js show +22900000000 2>&1 | grep -q "Aucun compte" || { echo "outil d'administration injoignable"; exit 1; }

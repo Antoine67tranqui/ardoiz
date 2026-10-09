@@ -1,4 +1,6 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RequestOtpDto } from './dto/request-otp.dto';
@@ -7,6 +9,11 @@ import { SetupPinDto } from './dto/setup-pin.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ChangePinDto } from './dto/change-pin.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
+import { AcceptTermsDto } from './dto/accept-terms.dto';
+import { AccountService } from '../account/account.service';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
@@ -14,13 +21,25 @@ import { AuthenticatedUser } from './strategies/jwt.strategy';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly account: AccountService,
+    private readonly audit: AuditService,
+  ) {}
 
+  // 10 demandes / 5 min par IP (large : plusieurs commercants peuvent partager
+  // la meme IP d'operateur). La protection contre le "SMS bombing" d'un numero
+  // donne est assuree par AuthService : un seul code par numero et par minute.
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @Post('otp/request')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.authService.requestOtp(dto.phone);
   }
 
+  // 10 tentatives / 5 min par IP : le code a 6 chiffres expire deja au bout
+  // de 5 minutes, mais sans limite de requetes un attaquant pourrait tenter
+  // les 10000 combinaisons avant expiration.
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @Post('otp/verify')
   verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyOtp(dto.phone, dto.code);
@@ -28,9 +47,13 @@ export class AuthController {
 
   @Post('pin/setup')
   setupPin(@Body() dto: SetupPinDto) {
-    return this.authService.setupPin(dto.otpSessionToken, dto.businessName, dto.pin);
+    return this.authService.setupPin(dto.otpSessionToken, dto.businessName, dto.pin, dto.termsVersion);
   }
 
+  // Le verrouillage de compte (auth.service.ts) protege deja le PIN apres 5
+  // echecs, mais une limite par IP evite qu'un attaquant essaie des numeros
+  // de telephone differents pour contourner le verrouillage par compte.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.phone, dto.pin);
@@ -46,5 +69,75 @@ export class AuthController {
   @Post('pin/change')
   changePin(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePinDto) {
     return this.authService.changePin(user.id, dto.currentPin, dto.newPin);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProfileDto) {
+    return this.authService.updateProfile(user.id, dto.businessName);
+  }
+
+  // Action irreversible : limitee, et confirmee par le PIN (comptabilise comme une connexion).
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('account/delete')
+  deleteAccount(@CurrentUser() user: AuthenticatedUser, @Body() dto: DeleteAccountDto) {
+    return this.authService.deleteAccount(user.id, dto.pin);
+  }
+
+  /** Acceptation d'une nouvelle version des conditions (re-consentement). */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('consent')
+  acceptTerms(@CurrentUser() user: AuthenticatedUser, @Body() dto: AcceptTermsDto) {
+    return this.account.acceptTerms(user.id, dto.termsVersion);
+  }
+
+  /** Journal d'activite du compte (100 derniers evenements, 12 mois au plus). */
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('activity')
+  activity(@CurrentUser() user: AuthenticatedUser) {
+    return this.audit.recent(user.id);
+  }
+
+  /** Droit d'acces et de portabilite : copie complete des donnees du compte (JSON). */
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('export')
+  async exportAll(@CurrentUser() user: AuthenticatedUser, @Res() res: Response) {
+    const data = await this.account.exportAll(user.id);
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="carne-mes-donnees-${date}.json"`);
+    res.send(JSON.stringify(data, null, 2));
+  }
+
+  /** Donnees d'un seul client ou fournisseur (demande d'acces de cette personne). */
+  @Throttle({ default: { limit: 30, ttl: 3_600_000 } })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('export/customers/:id')
+  async exportParty(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    const data = await this.account.exportParty(user.id, id);
+    if (!data) throw new NotFoundException('Client introuvable');
+    return data;
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  logout(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.logout(user.id);
   }
 }

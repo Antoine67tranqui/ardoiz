@@ -17,15 +17,20 @@ export class SubscriptionService {
 
   async getStatus(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const customerCount = await this.prisma.customer.count({ where: { userId } });
+    const [customerCount, supplierCount] = await Promise.all([
+      this.prisma.customer.count({ where: { userId, kind: 'CLIENT' } }),
+      this.prisma.customer.count({ where: { userId, kind: 'SUPPLIER' } }),
+    ]);
     const isPremium = isPremiumActive(user);
 
     return {
       plan: isPremium ? 'PREMIUM' : 'FREE',
       planExpiresAt: user.planExpiresAt,
       customerCount,
+      supplierCount,
       customerLimit: isPremium ? null : FREE_PLAN_CUSTOMER_LIMIT,
       monthlyPriceFcfa: PREMIUM_MONTHLY_PRICE_FCFA,
+      paymentsAvailable: this.mobileMoneyService.isOperational(),
     };
   }
 
@@ -42,12 +47,17 @@ export class SubscriptionService {
       throw new NotFoundException('Utilisateur introuvable');
     }
 
+    // L'activation "simulee" ci-dessous offre Premium sans paiement : elle ne
+    // doit exister qu'en dev/test (assertOperational refuse en production tant
+    // qu'aucun agregateur reel n'est branche).
+    this.mobileMoneyService.assertOperational();
+
     const result = await this.mobileMoneyService.requestPayment({
       phone: user.phone,
       amount: PREMIUM_MONTHLY_PRICE_FCFA,
       debtId: `subscription-${userId}`,
       customerName: user.businessName,
-      businessName: 'Ardoiz',
+      businessName: 'Carné',
     });
 
     if (result.simulated) {

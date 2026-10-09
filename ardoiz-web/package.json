@@ -1,0 +1,10 @@
+{
+  "name": "carne-web",
+  "private": true,
+  "description": "Vitrine statique de Carné et client web en ligne (JavaScript natif, aucune dépendance d'exécution, aucun outil de build)",
+  "scripts": {
+    "test": "node --test test/site.test.mjs test/app.test.mjs",
+    "test:e2e": "node --test --test-reporter=spec test/e2e/app.e2e.mjs",
+    "start": "node test/e2e/server.mjs"
+  }
+}

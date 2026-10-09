@@ -44,26 +44,37 @@ enum ReminderTone {
 
 // Commercant (boutiquier, pharmacien, etc.)
 model User {
-  id           String     @id @default(uuid())
-  phone        String     @unique
-  pinHash      String
-  businessName String
-  otpCode      String?
-  otpExpiresAt DateTime?
+  id                String          @id @default(uuid())
+  phone             String          @unique
+  pinHash           String
+  businessName      String
+  // Empreinte HMAC du code OTP (jamais le code en clair) et nombre d'essais
+  // errones : au-dela du seuil (AuthService.MAX_OTP_ATTEMPTS) le code est invalide.
+  otpCode           String?
+  otpExpiresAt      DateTime?
+  otpFailedAttempts Int             @default(0)
   // Protection anti-bruteforce du PIN (4 chiffres = 10 000 combinaisons) :
   // compteur remis a zero a chaque connexion reussie, verrouillage temporaire
   // au-dela du seuil (voir AuthService.MAX_PIN_ATTEMPTS).
-  pinFailedAttempts Int       @default(0)
+  pinFailedAttempts Int             @default(0)
   pinLockedUntil    DateTime?
   // Abonnement : FREE limite a un petit nombre de clients et sans
   // tableau de bord/relances automatiques ; PREMIUM leve ces limites
   // jusqu'a planExpiresAt (reconduit a chaque paiement Mobile Money).
-  plan          Plan      @default(FREE)
-  planExpiresAt DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  customers    Customer[]
-  reminderRules ReminderRule[]
+  plan              Plan            @default(FREE)
+  planExpiresAt     DateTime?
+  // Incremente a la deconnexion et au changement de PIN : tout refresh token
+  // deja emis porte l'ancienne valeur dans son payload et est rejete par
+  // AuthService.refresh(), ce qui permet de revoquer des jetons sans les
+  // stocker individuellement (JWT reste stateless cote acces/refresh).
+  tokenVersion      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  customers         Customer[]
+  reminderRules     ReminderRule[]
+  cashEntries       CashEntry[]
+  consents          ConsentRecord[]
+  auditLogs         AuditLog[]
 
   @@map("users")
 }
@@ -72,15 +83,15 @@ model User {
 // l'echeance d'une dette : offsetDays negatif = avant echeance (rappel
 // courtois), positif = apres echeance (relance de retard).
 model ReminderRule {
-  id         String           @id @default(uuid())
+  id         String          @id @default(uuid())
   userId     String
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   offsetDays Int
-  channel    ReminderChannel  @default(SMS)
-  tone       ReminderTone     @default(NEUTRAL)
-  enabled    Boolean          @default(true)
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  channel    ReminderChannel @default(SMS)
+  tone       ReminderTone    @default(NEUTRAL)
+  enabled    Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   @@unique([userId, offsetDays])
   @@index([userId])
@@ -89,41 +100,50 @@ model ReminderRule {
 
 // Client du commercant, a qui du credit est accorde
 model Customer {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
   // Obligatoire : necessaire pour les relances SMS/WhatsApp et les
   // demandes de paiement Mobile Money, coeur de la valeur de l'app.
-  phone     String
+  phone          String
   // Plafond de credit optionnel fixe par le commercant pour ce client :
   // sert a l'alerter (pas a bloquer) quand l'encours du client le depasse,
   // pour prevenir le surendettement. Null = pas de plafond.
-  creditLimit Decimal? @db.Decimal(12, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  debts     Debt[]
+  creditLimit    Decimal?  @db.Decimal(12, 2)
+  // CLIENT : il me doit de l'argent (l'ardoise). SUPPLIER : je lui dois de
+  // l'argent (achats a credit aupres d'un fournisseur). Les dettes et paiements
+  // suivent les memes regles ; seules les relances et le Mobile Money sont
+  // reserves aux clients.
+  kind           PartyKind @default(CLIENT)
+  // Opposition de la personne a recevoir des relances (droit d'opposition) :
+  // aucune relance, manuelle ou automatique, ne lui est envoyee par Carne.
+  reminderOptOut Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  debts          Debt[]
 
   @@index([userId])
+  @@index([userId, kind])
   @@map("customers")
 }
 
 // Dette accordee par le commercant a un client ("l'ardoise")
 model Debt {
-  id          String     @id @default(uuid())
-  customerId  String
-  customer    Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  amount      Decimal    @db.Decimal(12, 2)
-  reason      String?
+  id         String     @id @default(uuid())
+  customerId String
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  amount     Decimal    @db.Decimal(12, 2)
+  reason     String?
   // Categorie de produit (Alimentation, Boissons, Hygiene, ...) utilisee
   // pour la ventilation du tableau de bord boutique.
-  category    String     @default("Autre")
-  status      DebtStatus @default(PENDING)
-  dueDate     DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  payments    Payment[]
-  reminders   Reminder[]
+  category   String     @default("Autre")
+  status     DebtStatus @default(PENDING)
+  dueDate    DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  payments   Payment[]
+  reminders  Reminder[]
 
   @@index([customerId])
   @@index([status])
@@ -133,13 +153,13 @@ model Debt {
 
 // Remboursement (total ou partiel) d'une dette
 model Payment {
-  id              String        @id @default(uuid())
-  debtId          String
-  debt            Debt          @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  amount          Decimal       @db.Decimal(12, 2)
-  method          PaymentMethod
-  transactionRef  String?       @unique
-  paidAt          DateTime      @default(now())
+  id             String        @id @default(uuid())
+  debtId         String
+  debt           Debt          @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  amount         Decimal       @db.Decimal(12, 2)
+  method         PaymentMethod
+  transactionRef String?       @unique
+  paidAt         DateTime      @default(now())
 
   @@index([debtId])
   @@map("payments")
@@ -147,18 +167,72 @@ model Payment {
 
 // Rappel envoye au client pour une dette en attente/retard
 model Reminder {
-  id        String           @id @default(uuid())
-  debtId    String
-  debt      Debt             @relation(fields: [debtId], references: [id], onDelete: Cascade)
-  channel   ReminderChannel
-  status    ReminderStatus   @default(QUEUED)
+  id              String          @id @default(uuid())
+  debtId          String
+  debt            Debt            @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  channel         ReminderChannel
+  status          ReminderStatus  @default(QUEUED)
   // Decalage (en jours, relatif a l'echeance) de la regle qui a declenche
   // cette relance automatique ; null pour une relance manuelle. Empeche le
   // cron de renvoyer deux fois la meme etape pour une meme dette.
   stageOffsetDays Int?
-  sentAt    DateTime?
-  createdAt DateTime         @default(now())
+  sentAt          DateTime?
+  createdAt       DateTime        @default(now())
 
   @@index([debtId])
   @@map("reminders")
+}
+
+enum PartyKind {
+  CLIENT
+  SUPPLIER
+}
+
+enum CashType {
+  SALE
+  EXPENSE
+}
+
+// Journal de caisse : ventes au comptant et depenses du commerce (hors dettes).
+model CashEntry {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       CashType
+  amount     Decimal  @db.Decimal(12, 2)
+  label      String?
+  category   String   @default("Autre")
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, occurredAt])
+  @@map("cash_entries")
+}
+
+// Historique des consentements (conditions d'utilisation et politique de
+// confidentialite, par version) : preuve de ce qui a ete accepte et quand.
+model ConsentRecord {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  version    String
+  acceptedAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+// Journal d'activite du compte (connexions, changement de PIN, export...).
+// Aucune adresse IP ni donnee du carnet n'y est stockee. Conserve 12 mois.
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

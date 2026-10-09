@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { outstandingOf } from '../common/money';
 import { isPremiumActive } from '../subscription/subscription.utils';
 
 export interface CategoryBreakdown {
@@ -50,33 +52,49 @@ export class DashboardService {
       });
     }
 
-    const [debts, totalCustomers] = await Promise.all([
+    // Les indicateurs ci-dessous portent sur les CLIENTS (ce qu'on me doit) ;
+    // ce que je dois aux fournisseurs est totalise a part (payables).
+    const [debts, supplierDebts, totalCustomers] = await Promise.all([
       this.prisma.debt.findMany({
-        where: { customer: { userId } },
+        where: { customer: { userId, kind: 'CLIENT' } },
         include: { customer: true, payments: true },
       }),
-      this.prisma.customer.count({ where: { userId } }),
+      this.prisma.debt.findMany({
+        where: { customer: { userId, kind: 'SUPPLIER' } },
+        include: { payments: true },
+      }),
+      this.prisma.customer.count({ where: { userId, kind: 'CLIENT' } }),
     ]);
 
     const now = new Date();
-    let totalOutstanding = 0;
-    const categoryMap = new Map<string, CategoryBreakdown>();
+    // Accumulation en Prisma.Decimal plutot qu'en Number() : ce tableau de
+    // bord somme potentiellement des centaines de montants, et une derive
+    // flottante meme infime fausserait le total affiche au commercant. On ne
+    // convertit en Number() qu'a la toute fin, pour la reponse JSON.
+    let totalOutstandingDec = new Prisma.Decimal(0);
+    const categoryMap = new Map<
+      string,
+      { category: string; totalOutstanding: Prisma.Decimal; count: number }
+    >();
     const overdueDebts: OverdueDebt[] = [];
     const customersWithDebt = new Set<string>();
 
     for (const debt of debts) {
-      const totalPaid = debt.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const outstanding = Math.max(0, Number(debt.amount) - totalPaid);
-      totalOutstanding += outstanding;
-      if (outstanding > 0) customersWithDebt.add(debt.customerId);
+      const outstandingDec = outstandingOf(debt.amount, debt.payments);
+      totalOutstandingDec = totalOutstandingDec.plus(outstandingDec);
+      if (outstandingDec.greaterThan(0)) customersWithDebt.add(debt.customerId);
 
       const category = debt.category || 'Autre';
-      const entry = categoryMap.get(category) ?? { category, totalOutstanding: 0, count: 0 };
-      entry.totalOutstanding += outstanding;
-      if (outstanding > 0) entry.count += 1;
+      const entry = categoryMap.get(category) ?? {
+        category,
+        totalOutstanding: new Prisma.Decimal(0),
+        count: 0,
+      };
+      entry.totalOutstanding = entry.totalOutstanding.plus(outstandingDec);
+      if (outstandingDec.greaterThan(0)) entry.count += 1;
       categoryMap.set(category, entry);
 
-      if (outstanding > 0 && debt.dueDate && debt.dueDate.getTime() < now.getTime()) {
+      if (outstandingDec.greaterThan(0) && debt.dueDate && debt.dueDate.getTime() < now.getTime()) {
         const daysOverdue = Math.floor(
           (now.getTime() - debt.dueDate.getTime()) / (24 * 60 * 60 * 1000),
         );
@@ -86,7 +104,7 @@ export class DashboardService {
           customerName: debt.customer.name,
           customerPhone: debt.customer.phone,
           amount: Number(debt.amount),
-          outstanding,
+          outstanding: outstandingDec.toNumber(),
           dueDate: debt.dueDate,
           daysOverdue,
           category,
@@ -143,13 +161,30 @@ export class DashboardService {
         }
       : null;
 
+    // Ce que je dois aux fournisseurs : reste a payer et part deja echue.
+    let payableDec = new Prisma.Decimal(0);
+    let payableOverdueDec = new Prisma.Decimal(0);
+    const suppliersWithDebt = new Set<string>();
+    for (const debt of supplierDebts) {
+      const outstandingDec = outstandingOf(debt.amount, debt.payments);
+      if (outstandingDec.lessThanOrEqualTo(0)) continue;
+      payableDec = payableDec.plus(outstandingDec);
+      suppliersWithDebt.add(debt.customerId);
+      if (debt.dueDate && debt.dueDate.getTime() < now.getTime()) {
+        payableOverdueDec = payableOverdueDec.plus(outstandingDec);
+      }
+    }
+
     return {
-      totalOutstanding,
+      totalPayable: payableDec.toNumber(),
+      payableOverdue: payableOverdueDec.toNumber(),
+      suppliersWithDebt: suppliersWithDebt.size,
+      totalOutstanding: totalOutstandingDec.toNumber(),
       totalCustomers,
       customersWithDebt: customersWithDebt.size,
-      byCategory: [...categoryMap.values()].sort(
-        (a, b) => b.totalOutstanding - a.totalOutstanding,
-      ),
+      byCategory: [...categoryMap.values()]
+        .map((entry) => ({ ...entry, totalOutstanding: entry.totalOutstanding.toNumber() }))
+        .sort((a, b) => b.totalOutstanding - a.totalOutstanding),
       overdueDebts,
       recoveryRate,
       atRiskCustomers,
@@ -173,19 +208,23 @@ export class DashboardService {
       const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
       const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
 
-      let amountGranted = 0;
-      let amountRecovered = 0;
+      let amountGranted = new Prisma.Decimal(0);
+      let amountRecovered = new Prisma.Decimal(0);
       for (const debt of debts) {
         if (debt.createdAt >= start && debt.createdAt < end) {
-          amountGranted += Number(debt.amount);
+          amountGranted = amountGranted.plus(debt.amount as Prisma.Decimal);
         }
         for (const payment of debt.payments) {
           if (payment.paidAt >= start && payment.paidAt < end) {
-            amountRecovered += Number(payment.amount);
+            amountRecovered = amountRecovered.plus(payment.amount as Prisma.Decimal);
           }
         }
       }
-      points.push({ month, amountGranted, amountRecovered });
+      points.push({
+        month,
+        amountGranted: amountGranted.toNumber(),
+        amountRecovered: amountRecovered.toNumber(),
+      });
     }
 
     return points;

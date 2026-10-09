@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { FeatureUnavailableException } from '../common/feature-unavailable.exception';
 
 export interface MomoPaymentRequestResult {
   reference: string;
@@ -25,6 +26,27 @@ export class MobileMoneyService {
     return Boolean(this.config.get<string>('MOMO_API_KEY'));
   }
 
+  /**
+   * Les paiements reels sont-ils utilisables ? Hors production, la simulation
+   * permet de tester le parcours complet. En production il faut une cle
+   * d'agregateur ET une integration reelle, qui n'est pas encore branchee :
+   * tant que c'est le cas, on le dit franchement plutot que de simuler un
+   * paiement qui n'atteindrait jamais le client.
+   */
+  isOperational(): boolean {
+    if (this.config.get<string>('NODE_ENV') !== 'production') return true;
+    return this.isConfigured() && MobileMoneyService.REAL_INTEGRATION_IMPLEMENTED;
+  }
+
+  /** A passer a `true` quand l'appel reel a l'agregateur est branche et teste. */
+  static readonly REAL_INTEGRATION_IMPLEMENTED = false;
+
+  assertOperational(): void {
+    if (!this.isOperational()) {
+      throw new FeatureUnavailableException("Le paiement Mobile Money n'est pas encore disponible.");
+    }
+  }
+
   async requestPayment(params: {
     phone: string;
     amount: number;
@@ -32,6 +54,7 @@ export class MobileMoneyService {
     customerName: string;
     businessName: string;
   }): Promise<MomoPaymentRequestResult> {
+    this.assertOperational();
     if (!this.isConfigured()) {
       const reference = `SIM-${crypto.randomUUID()}`;
       this.logger.warn(
@@ -51,8 +74,6 @@ export class MobileMoneyService {
     // checkout API) une fois MOMO_API_KEY / MOMO_SITE_ID renseignes dans
     // .env. La reponse de l'agregateur doit fournir une reference de
     // transaction, confirmee ensuite via le webhook /webhooks/mobile-money.
-    throw new Error(
-      "Integration Mobile Money reelle non implementee. Fournissez les details de l'agregateur (CinetPay/PayDunya) pour la brancher.",
-    );
+    throw new FeatureUnavailableException("Le paiement Mobile Money n'est pas encore disponible.");
   }
 }

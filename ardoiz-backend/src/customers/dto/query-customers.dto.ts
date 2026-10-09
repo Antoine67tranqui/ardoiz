@@ -1,13 +1,20 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { PartyKind } from '@prisma/client';
 
 export type CustomerSortField = 'name' | 'balance' | 'createdAt';
 
 export class QueryCustomersDto {
+  @ApiPropertyOptional({ enum: PartyKind, description: 'Ne retourner que les clients ou que les fournisseurs (tous par defaut)' })
+  @IsOptional()
+  @IsEnum(PartyKind)
+  kind?: PartyKind;
+
   @ApiPropertyOptional({ description: 'Recherche par nom ou numero de telephone' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   search?: string;
 
   @ApiPropertyOptional({

@@ -1,3 +1,11 @@
 .npm-cache
 node_modules
 .DS_Store
+
+# Secrets de production et sauvegardes : jamais versionnes
+deploy/.env
+*.age
+age-key*.txt
+key.properties
+*.jks
+*.keystore

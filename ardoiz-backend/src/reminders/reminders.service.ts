@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { ReminderChannel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DebtsService } from '../debts/debts.service';
+import { outstandingOf } from '../common/money';
 
 @Injectable()
 export class RemindersService {
@@ -21,6 +22,19 @@ export class RemindersService {
     channel: ReminderChannel = 'SMS',
   ) {
     const debt = await this.debtsService.getOwnedDebt(userId, debtId);
+    if (debt.customer.kind === 'SUPPLIER') {
+      throw new BadRequestException("On ne relance pas un fournisseur : c'est vous qui lui devez de l'argent");
+    }
+    if (debt.customer.reminderOptOut) {
+      throw new ConflictException({
+        code: 'REMINDER_OPT_OUT',
+        message: "Ce client s'oppose a recevoir des relances. Retirez son opposition dans sa fiche si c'est a sa demande.",
+      });
+    }
+    // Relancer une dette soldee enverrait un message de reclamation a tort.
+    if (outstandingOf(debt.amount, debt.payments).lessThanOrEqualTo(0)) {
+      throw new BadRequestException('Cette dette est deja soldee');
+    }
     return this.dispatchReminder(debt.id, channel);
   }
 
@@ -56,7 +70,7 @@ export class RemindersService {
         where: {
           status: { in: ['PENDING', 'PARTIAL'] },
           dueDate: { gte: targetStart, lt: targetEnd },
-          customer: { userId: rule.userId },
+          customer: { userId: rule.userId, kind: 'CLIENT', reminderOptOut: false },
           // Pas de relance deja envoyee pour cette meme etape sur cette dette.
           reminders: { none: { stageOffsetDays: rule.offsetDays } },
         },
@@ -64,8 +78,15 @@ export class RemindersService {
 
       for (const debt of debts) {
         try {
-          await this.dispatchReminder(debt.id, rule.channel, rule.offsetDays, rule.tone);
-          sent += 1;
+          const reminder = await this.dispatchReminder(
+            debt.id,
+            rule.channel,
+            rule.offsetDays,
+            rule.tone,
+          );
+          // dispatchReminder absorbe les echecs d'envoi (statut FAILED) : ne
+          // compter que les relances reellement parties.
+          if (reminder.status === 'SENT') sent += 1;
         } catch (error) {
           this.logger.error(`Echec relance dette ${debt.id} (etape ${rule.offsetDays}j)`, error as Error);
         }
@@ -82,7 +103,7 @@ export class RemindersService {
   ) {
     const debt = await this.prisma.debt.findUniqueOrThrow({
       where: { id: debtId },
-      include: { customer: { include: { user: true } } },
+      include: { customer: { include: { user: true } }, payments: true },
     });
 
     const reminder = await this.prisma.reminder.create({
@@ -102,7 +123,9 @@ export class RemindersService {
         phone: debt.customer.phone,
         channel,
         customerName: debt.customer.name,
-        amount: Number(debt.amount).toString(),
+        // Le reste a payer, pas le montant initial : apres un paiement partiel,
+        // reclamer la somme d'origine serait faux et ferait perdre la confiance du client.
+        amount: outstandingOf(debt.amount, debt.payments).toString(),
         businessName: debt.customer.user.businessName,
         tone,
       });

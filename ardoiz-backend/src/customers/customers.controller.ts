@@ -3,12 +3,15 @@ import {
   Controller,
   Delete,
   Get,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -25,9 +28,16 @@ import { QueryCustomersDto } from './dto/query-customers.dto';
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
+  /** 201 a la creation, 200 si un envoi rejoue (meme `id` client) renvoie le client existant. */
   @Post()
-  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCustomerDto) {
-    return this.customersService.create(user.id, dto);
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCustomerDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { customer, created } = await this.customersService.create(user.id, dto);
+    if (!created) res.status(HttpStatus.OK);
+    return customer;
   }
 
   @Get()

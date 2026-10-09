@@ -1,10 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, Matches, Min, MinLength } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { PartyKind } from '@prisma/client';
+import { MAX_AMOUNT_FCFA } from '../../common/constants';
 
 export class CreateCustomerDto {
+  @ApiPropertyOptional({
+    description:
+      "Identifiant genere par le client (UUID v4) : rend la creation idempotente, un meme envoi rejoue apres une coupure reseau ne cree jamais de doublon",
+  })
+  @IsOptional()
+  @IsUUID('4')
+  id?: string;
+
   @ApiProperty({ example: 'Aicha Traore' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @MinLength(2)
+  @MaxLength(100)
   name!: string;
 
   // Obligatoire : necessaire pour les relances SMS/WhatsApp et les
@@ -24,7 +37,24 @@ export class CreateCustomerDto {
       "Plafond de credit optionnel (FCFA) : au-dela, l'app alerte le commercant sans bloquer la saisie",
   })
   @IsOptional()
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(MAX_AMOUNT_FCFA)
   creditLimit?: number;
+
+  @ApiPropertyOptional({
+    enum: PartyKind,
+    default: 'CLIENT',
+    description: "CLIENT : il me doit de l'argent. SUPPLIER : je lui dois de l'argent. Ne se modifie pas apres la creation.",
+  })
+  @IsOptional()
+  @IsEnum(PartyKind)
+  kind?: PartyKind;
+
+  @ApiPropertyOptional({
+    description: "Vrai si la personne s'oppose a recevoir des relances : plus aucune relance ne lui est envoyee",
+  })
+  @IsOptional()
+  @IsBoolean()
+  reminderOptOut?: boolean;
 }
